@@ -689,6 +689,7 @@ function autoKat(ratings){
 }
 
 const KC={stark:{l:"★ Stark",c:"#1a7a3c"},mittel:{l:"◆ Mittel",c:"#1565c0"},schwach:{l:"▽ Schwach",c:"#e65100"},inaktiv:{l:"○ Inaktiv",c:"#888"},"":{l:"– offen",c:"#aaa"}};
+const SQTYPE={stamm:{l:"Stammkader",c:"#1a7a3c",bg:"#e8f5e9"},ersatz:{l:"Ersatzkader",c:"#1565c0",bg:"#e3f2fd"},reserve:{l:"Reservekader",c:"#888",bg:"#f5f5f5"},"":{l:"",c:"#aaa",bg:"transparent"}};
 const MEDALS=["🥇","🥈","🥉"];
 
 let PLAYERS=[...STATIC_PLAYERS],PS={},SS=[],SPIELE={},HW={},ATT_CACHE={},VENUES={};
@@ -808,13 +809,14 @@ function rt(){
   // Mobile cards
   const pc=document.getElementById("pc");
   if(pc) pc.innerHTML=list.map(p=>{
-    const ps=PS[p.id]||{},po=ps.po||p.p,k=ps.k||"",pct=ps._pct;
+    const ps=PS[p.id]||{},po=ps.po||p.p,k=ps.k||"",pct=ps._pct,sqt=ps.sqt||"",sqtData=SQTYPE[sqt]||SQTYPE[""];
     return`<div class="pcard${SEL===p.id?" sel":""}${!p.r?" unreg":""}" onclick="selP('${p.id}')">
       <div class="pcav ${po==="TW"?"o":"g"}">${ii(p.f,p.l)}</div>
       <div class="pc-info">
         <div class="pc-name">${p.l!=="—"?p.l+",":""} ${p.f}${po==="TW"?` <span style="font-size:10px;background:#fff3e0;color:#e65100;padding:1px 5px;border-radius:6px;font-weight:700">TW</span>`:""}</div>
         <div class="pc-sub">
           ${k?`<span class="kat-badge ${KC_CLS[k]||""}">${KC_LBL[k]}</span>`:""}
+          ${sqt?`<span style="font-size:10px;padding:1px 7px;border-radius:8px;font-weight:700;background:${sqtData.bg};color:${sqtData.c}">${sqtData.l}</span>`:""}
           ${p.r===true?`<span class="reg-ok">✓</span>`:`<span class="reg-no">⚠ Anm.</span>`}
           ${p.d&&p.d!=="—"?`<span>${p.d}</span>`:""}
         </div>
@@ -864,8 +866,9 @@ function sw(v){
   if(v==="weltmeister")renderWM();
   window.scrollTo(0,0);
 }
-async function sK(id,v){if(!PS[id])PS[id]={};PS[id].k=v;await sp(id);rs();rt();}
+async function sK(id,v){if(!PS[id])PS[id]={k:"",sqt:""};PS[id].k=v;await sp(id);rs();rt();}
 async function sPo(id,v){if(!PS[id])PS[id]={};PS[id].po=v;await sp(id);}
+async function sSqt(id,v){if(!PS[id])PS[id]={};PS[id].sqt=v;await sp(id);rt();}
 function openM(id){document.getElementById(id).classList.add("open");}
 function closeM(id){document.getElementById(id).classList.remove("open");}
 async function saveNewPlayer(){
@@ -915,13 +918,71 @@ async function rpT(id){
   const body=document.getElementById("pb2"),p=PLAYERS.find(x=>x.id===id);if(!p)return;
   const ps=PS[id]||{};
   if(PT==="profil"){
-    STR=ps.rt||0;
-    body.innerHTML=`<div class="pr">
-      <div><div class="pl">Bewertung</div><div class="stl" id="pst">${[1,2,3,4,5].map(i=>`<span class="ss${i<=STR?" f":""}" onclick="setSt(${i},'${id}')" onmouseover="hvSt(${i})" onmouseout="hvSt(0)">★</span>`).join("")}</div></div>
-      <div><div class="pl">Kategorie</div><select class="ms" onchange="sK('${id}',this.value)"><option value="">– offen –</option><option value="stark"${ps.k==="stark"?" selected":""}>★ Stark</option><option value="mittel"${ps.k==="mittel"?" selected":""}>◆ Mittel</option><option value="schwach"${ps.k==="schwach"?" selected":""}>▽ Schwach</option><option value="inaktiv"${ps.k==="inaktiv"?" selected":""}>○ Inaktiv</option></select></div></div>
+    // Auto-rating from Stärken
+    const rt=ps.ratings||{};
+    const rated=RATING_CATS.filter(c=>rt[c.id]>0);
+    const avg=rated.length?rated.reduce((s,c)=>s+rt[c.id],0)/rated.length:0;
+    const autoK=autoKat(rt);
+    const autoC={stark:"#1a7a3c",mittel:"#1565c0",schwach:"#e65100","":" #aaa"}[autoK];
+    const autoL={stark:"★ Stark",mittel:"◆ Mittel",schwach:"▽ Schwach","":" "}[autoK];
+    // Convert stored date "DD.MM.YYYY" to input value "YYYY-MM-DD"
+    let dobVal="";
+    if(p.d&&p.d!=="—"){const[dd,mm,yy]=p.d.split(".");if(yy)dobVal=yy+"-"+mm+"-"+dd;}
+    const sqt=ps.sqt||"";
+    body.innerHTML=`
+    <!-- Auto-Bewertung (aus Stärkenprofil) -->
+    <div style="background:#f9f9f9;border-radius:10px;padding:10px 12px;border:1px solid #eee;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+      <div style="flex:1">
+        <div style="font-size:10px;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:2px">Bewertung (aus Stärkenprofil)</div>
+        <div style="font-size:15px;font-weight:700;color:${autoC||"#aaa"}">${autoL||"– noch keine Bewertung im Stärkenprofil"}</div>
+        ${avg>0?`<div style="font-size:11px;color:#888;margin-top:2px">Durchschnitt ${avg.toFixed(1)} / 5.0 &middot; ${rated.length}/5 Kategorien</div>`:"<div style='font-size:11px;color:#aaa;margin-top:2px'>Im Tab &quot;Staerken&quot; Werte eintragen</div>"}
+      </div>
+    </div>
+    <!-- Basis-Daten (editierbar) -->
+    <div class="pr" style="margin-bottom:10px">
+      <div>
+        <div class="pl">Geburtsdatum</div>
+        <input type="date" id="p-dob" value="${dobVal}" style="width:100%;border:1px solid #ddd;border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit;outline:none"/>
+      </div>
+      <div>
+        <div class="pl">Position</div>
+        <select id="p-pos" class="ms">
+          <option value="FP"${(ps.po||p.p)==="FP"?" selected":""}>Feldspieler</option>
+          <option value="TW"${(ps.po||p.p)==="TW"?" selected":""}>Torwart</option>
+        </select>
+      </div>
+    </div>
+    <div class="pr" style="margin-bottom:10px">
+      <div>
+        <div class="pl">Anmeldestatus</div>
+        <select id="p-reg" class="ms">
+          <option value="true"${p.r===true?" selected":""}>✓ Spielberechtigt</option>
+          <option value="false"${p.r===false?" selected":""}>⚠ Noch anmelden</option>
+        </select>
+      </div>
+      <div>
+        <div class="pl">Kategorie (manuell)</div>
+        <select id="p-kat" class="ms" onchange="sK('${id}',this.value)">
+          <option value="">– offen –</option>
+          <option value="stark"${ps.k==="stark"?" selected":""}>★ Stark</option>
+          <option value="mittel"${ps.k==="mittel"?" selected":""}>◆ Mittel</option>
+          <option value="schwach"${ps.k==="schwach"?" selected":""}>▽ Schwach</option>
+          <option value="inaktiv"${ps.k==="inaktiv"?" selected":""}>○ Inaktiv</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <div class="pl">Kadertyp</div>
+      <select id="p-sqt" class="ms" style="font-size:14px">
+        <option value="">– nicht zugeordnet –</option>
+        <option value="stamm"${sqt==="stamm"?" selected":""}>Stammkader</option>
+        <option value="ersatz"${sqt==="ersatz"?" selected":""}>Ersatzkader</option>
+        <option value="reserve"${sqt==="reserve"?" selected":""}>Reservekader</option>
+      </select>
+    </div>
     <div class="pl">Trainer-Notizen</div>
-    <textarea id="pnt" rows="4" placeholder="Beobachtungen, Stärken, Schwächen...">${ps.nt||""}</textarea>
-    <div class="sr"><span class="sv-ok" id="sv-ok">✓ Gespeichert</span><button class="bg" onclick="svProfil('${id}')">💾 Speichern</button></div>`;
+    <textarea id="pnt" rows="3" placeholder="Beobachtungen, Staerken, Schwaehen...">${ps.nt||""}</textarea>
+    <div class="sr"><span class="sv-ok" id="sv-ok">✓ Gespeichert</span><button class="bg" onclick="svProfil('${id}')">Speichern</button></div>`;
   } else if(PT==="staerken"){
     const rt=ps.ratings||{};
     const rated=RATING_CATS.filter(c=>rt[c.id]>0);
@@ -982,7 +1043,30 @@ async function rpT(id){
 }
 function hvSt(n){document.querySelectorAll("#pst .ss").forEach((s,i)=>s.classList.toggle("f",n>0?i<n:i<STR));}
 function setSt(n,id){STR=n;document.querySelectorAll("#pst .ss").forEach((s,i)=>s.classList.toggle("f",i<n));}
-async function svProfil(id){PS[id].rt=STR;PS[id].nt=document.getElementById("pnt").value;await sp(id);const el=document.getElementById("sv-ok");if(el){el.style.opacity=1;setTimeout(()=>el.style.opacity=0,2000);}rt();}
+async function svProfil(id){
+  if(!PS[id])PS[id]={};
+  PS[id].nt=document.getElementById("pnt").value;
+  // Kadertyp
+  const sqtEl=document.getElementById("p-sqt");
+  if(sqtEl)PS[id].sqt=sqtEl.value;
+  // Kategorie (manual)
+  const katEl=document.getElementById("p-kat");
+  if(katEl&&katEl.value)PS[id].k=katEl.value;
+  await sp(id);
+  // Save basic info back to players_list
+  const p=PLAYERS.find(x=>x.id===id);
+  if(p){
+    const dobRaw=document.getElementById("p-dob")?.value;
+    if(dobRaw){const[y,m,d]=dobRaw.split("-");p.d=d+"."+m+"."+y;}
+    const regEl=document.getElementById("p-reg");
+    if(regEl)p.r=regEl.value==="true";
+    const posEl=document.getElementById("p-pos");
+    if(posEl){p.p=posEl.value;PS[id].po=posEl.value;}
+    await fbSet("players_list/"+id,{f:p.f,l:p.l,d:p.d,n:p.n,p:p.p,r:p.r});
+  }
+  const el=document.getElementById("sv-ok");if(el){el.style.opacity=1;setTimeout(()=>el.style.opacity=0,2000);}
+  rs();rt();rp(id);
+}
 function setRating(id,cat,val){
   if(!PS[id].ratings)PS[id].ratings={};
   // Toggle off if same value clicked
@@ -1140,10 +1224,11 @@ function renderSD(k){
       </div>
     </div>
     <div id="sd-squad-body"></div>
-    <div style="padding:.875rem 1rem;border-top:1px solid #eee">
-      <button onclick="sendSpielWA('${k}')" style="width:100%;padding:13px;background:#25D366;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer">WhatsApp Nachricht senden</button>
-    </div>`;
-  showSquadTab(k,1);
+    <div style="padding:.875rem 1rem;border-top:1px solid #eee;display:flex;gap:8px">
+      <button onclick="sendSpielWA('${k}',SD_ACTIVE_TEAM)" style="flex:1;padding:12px;background:#25D366;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer">Dieses Team</button>
+      <button onclick="sendSpielWA('${k}',0)" style="flex:1;padding:12px;background:#128C7E;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer">Alle Teams</button>
+    </div>\`;
+  showSquadTab(k, SD_ACTIVE_TEAM||1);
 }
 
 function showSquadTab(k,num){
@@ -1207,25 +1292,30 @@ async function saveSpielField(k,field,val){
   if(!SPIELE[k])return;SPIELE[k][field]=val;await fbSet("spiele/"+k+"/"+field,val);
 }
 
-function sendSpielWA(k){
+function sendSpielWA(k,num){
   const g=SPIELE[k];if(!g)return;
   const getName=pid=>{const p=PLAYERS.find(x=>x.id===pid);return p?p.f:null;};
-  const n1=Object.keys(g.squad1||{}).map(getName).filter(Boolean).map(n=>"- "+n).join("\n");
-  const n2=Object.keys(g.squad2||{}).map(getName).filter(Boolean).map(n=>"- "+n).join("\n");
-  const n3=Object.keys(g.squad3||{}).map(getName).filter(Boolean).map(n=>"- "+n).join("\n");
   const addrLine=[g.strasse,g.plz&&g.ort?g.plz+" "+g.ort:""].filter(Boolean).join(", ");
-
   let msg="Spieltag bei *"+(g.gastgeber||"VfB Leimen")+"*\n\n";
-  msg+="Liebe Eltern,\n";
-  msg+="anbei der Kader fuer unseren";
+  msg+="Liebe Eltern,\nanbei der Kader fuer unseren";
   if(g.format) msg+=" "+g.format;
   msg+=" Spieltag";
   if(addrLine) msg+=" ("+addrLine+")";
   msg+=".\n\n";
-  if(n1){msg+="Team 1";if(g.time1)msg+=" (Treffpunkt "+g.time1+")";msg+="\n"+n1+"\n\n";}
-  if(n2){msg+="Team 2";if(g.time2)msg+=" (Treffpunkt "+g.time2+")";msg+="\n"+n2+"\n\n";}
-  if(n3){msg+="Team 3";if(g.time3)msg+=" (Treffpunkt "+g.time3+")";msg+="\n"+n3+"\n\n";}
-  if(g.hinweis) msg+=g.hinweis+"\n\n";
+  // num=0 → alle Teams; num=1/2/3 → nur dieses Team
+  const teams=num===0?[1,2,3]:[num];
+  let hasContent=false;
+  teams.forEach(n=>{
+    const names=Object.keys(g["squad"+n]||{}).map(getName).filter(Boolean).map(x=>"- "+x).join("\n");
+    if(!names)return;
+    hasContent=true;
+    msg+="Team "+n;
+    const t=n===1?g.time1:n===2?g.time2:g.time3;
+    if(t)msg+=" (Treffpunkt "+t+")";
+    msg+="\n"+names+"\n\n";
+  });
+  if(!hasContent){alert("Kein Spieler nominiert.");return;}
+  if(g.hinweis)msg+=g.hinweis+"\n\n";
   msg+="Viele Gruesse\nEuer Trainerteam - VfB Leimen";
   window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank");
 }
