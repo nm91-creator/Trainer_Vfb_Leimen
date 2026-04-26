@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VfB Leimen · Jahrgang 2017</title>
+<script>
+// ══════════════════════════════════════════════════════
+// Firebase Realtime Database – REST API (kein SDK nötig)
+// ══════════════════════════════════════════════════════
+const DB = "https://vfb-leimen-default-rtdb.europe-west1.firebasedatabase.app";
+
+window.fbGet = async (path) => {
+  try {
+    const r = await fetch(`${DB}/${path}.json`);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch(e) { return null; }
+};
+window.fbSet = async (path, val) => {
+  await fetch(`${DB}/${path}.json`, {
+    method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(val)
+  });
+};
+window.fbDel = async (path) => {
+  await fetch(`${DB}/${path}.json`, { method: "DELETE" });
+};
+window.fbPush = async (path, val) => {
+  const r = await fetch(`${DB}/${path}.json`, {
+    method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(val)
+  });
+  return r.json();
+};
+const _listeners = {};
+window.fbListen = (path, cb) => {
+  if (_listeners[path]) _listeners[path].close();
+  if (path === ".info/connected") { cb(true); return; }
+  const poll = async () => { try { cb(await window.fbGet(path)); } catch(e){} };
+  poll();
+  const id = setInterval(poll, 5000);
+  _listeners[path] = { close: () => clearInterval(id) };
+};
+</script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a1a;font-size:14px}
+
+/* ── Loading ── */
+#loading{position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.spin{width:36px;height:36px;border:3px solid #e8f5e9;border-top:3px solid #1a7a3c;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── App shell ── */
+.app{max-width:1100px;margin:0 auto;padding:.75rem}
+
+/* ── Header ── */
+.hdr{background:#1a7a3c;color:#fff;border-radius:12px;padding:.875rem 1rem;display:flex;align-items:center;gap:10px;margin-bottom:.75rem}
+.hdr-info{flex:1;min-width:0}
+.hdr-title{font-size:16px;font-weight:700}
+.hdr-sub{font-size:11px;opacity:.75;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.live-badge{display:flex;align-items:center;gap:4px;font-size:10px;opacity:.85;flex-shrink:0}
+.ldot{width:6px;height:6px;border-radius:50%;background:#4caf50;flex-shrink:0}
+
+/* ── Bottom nav tabs (mobile-first) ── */
+.mtabs{
+  position:fixed;bottom:0;left:0;right:0;
+  display:flex;background:#fff;border-top:1px solid #ddd;
+  z-index:100;padding-bottom:env(safe-area-inset-bottom);
+}
+.mt{
+  flex:1;padding:10px 2px 8px;text-align:center;font-size:9px;
+  cursor:pointer;color:#888;display:flex;flex-direction:column;
+  align-items:center;gap:2px;border:none;background:none;
+  transition:color .15s;
+}
+.mt-icon{font-size:20px;line-height:1}
+.mt.on{color:#1a7a3c;font-weight:700}
+.mt.on .mt-icon{transform:scale(1.1)}
+
+/* Page padding to avoid overlap with bottom nav */
+.page-wrap{padding-bottom:70px}
+
+/* ── Stat row ── */
+.srow{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:.75rem}
+.sc{background:#fff;border-radius:10px;padding:.6rem .25rem;text-align:center;border:1px solid #eee}
+.sn{font-size:18px;font-weight:700}.sl{font-size:9px;color:#888;margin-top:1px}
+.sn.g{color:#1a7a3c}.sn.b{color:#1565c0}.sn.o{color:#e65100}.sn.gr{color:#888}
+
+/* ── Filter pills ── */
+.tb{display:flex;gap:5px;margin-bottom:.75rem;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tb::-webkit-scrollbar{display:none}
+.fb{padding:7px 12px;border:1px solid #ddd;border-radius:20px;font-size:12px;cursor:pointer;background:#fff;color:#666;white-space:nowrap;flex-shrink:0;min-height:36px;display:flex;align-items:center}
+.fb.on-g{background:#1a7a3c;color:#fff;border-color:#1a7a3c}
+.fb.on-b{background:#1565c0;color:#fff;border-color:#1565c0}
+.fb.on-o{background:#e65100;color:#fff;border-color:#e65100}
+.fb.on-gr{background:#888;color:#fff;border-color:#888}
+.fb.on-r{background:#c0392b;color:#fff;border-color:#c0392b}
+
+/* ── Search row ── */
+.search-row{display:flex;gap:6px;margin-bottom:.75rem;align-items:center}
+.srch{flex:1;border:1px solid #ddd;border-radius:20px;padding:9px 14px;font-size:14px;outline:none;min-height:40px}
+.srt{border:1px solid #ddd;border-radius:8px;padding:8px 6px;font-size:12px;background:#fff;outline:none;min-height:40px}
+.add-player-btn{padding:9px 14px;background:#1a7a3c;color:#fff;border:none;border-radius:20px;font-size:13px;cursor:pointer;font-weight:700;white-space:nowrap;min-height:40px}
+
+/* ── Player cards (mobile) ── */
+.player-cards{display:flex;flex-direction:column;gap:6px;margin-bottom:.75rem}
+.pcard{background:#fff;border-radius:12px;border:1px solid #eee;padding:12px;cursor:pointer;transition:background .1s;display:flex;align-items:center;gap:10px}
+.pcard:active{background:#f0f0f0}
+.pcard.sel{background:#e8f5e9;border-color:#a5d6a7}
+.pcard.unreg{border-left:3px solid #e65100}
+.pcav{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.pcav.g{background:#e8f5e9;color:#1a7a3c}
+.pcav.o{background:#fff3e0;color:#e65100}
+.pc-info{flex:1;min-width:0}
+.pc-name{font-size:14px;font-weight:700}
+.pc-sub{font-size:11px;color:#888;margin-top:2px;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.pc-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+.pc-pct{font-size:12px;font-weight:700;color:#555}
+.pc-bar{width:44px;height:4px;background:#eee;border-radius:2px;overflow:hidden}
+.pc-bar-fill{height:4px;background:#1a7a3c;border-radius:2px}
+.kat-badge{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;display:inline-flex;align-items:center}
+.kat-stark{background:#e8f5e9;color:#1a7a3c}
+.kat-mittel{background:#e3f2fd;color:#1565c0}
+.kat-schwach{background:#fff3e0;color:#e65100}
+.kat-inaktiv{background:#f5f5f5;color:#888}
+.reg-ok{background:#e8f5e9;color:#1a7a3c;font-size:10px;padding:2px 6px;border-radius:8px;font-weight:700}
+.reg-no{background:#fff3e0;color:#c0392b;font-size:10px;padding:2px 6px;border-radius:8px;font-weight:700}
+
+/* ── Player panel (slide-in on mobile) ── */
+.pnl{background:#fff;border-radius:14px;border:1px solid #ddd;overflow:hidden;margin-bottom:.75rem;box-shadow:0 4px 20px rgba(0,0,0,.1)}
+.ph{background:#f8f8f8;padding:.875rem 1rem;display:flex;align-items:center;gap:10px;border-bottom:1px solid #eee}
+.pav{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
+.pav.g{background:#e8f5e9;color:#1a7a3c}.pav.o{background:#fff3e0;color:#e65100}
+.pnm{font-size:15px;font-weight:700}.pmt{font-size:12px;color:#888;margin-top:2px}
+.pcl{margin-left:auto;cursor:pointer;font-size:24px;color:#999;padding:4px 8px;border-radius:8px;min-width:40px;min-height:40px;display:flex;align-items:center;justify-content:center}
+.ptb{display:flex;border-bottom:1px solid #eee;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.ptbi{flex:1;min-width:72px;padding:10px 4px;text-align:center;font-size:11px;cursor:pointer;color:#888;border-bottom:3px solid transparent;white-space:nowrap;min-height:44px;display:flex;align-items:center;justify-content:center}
+.ptbi.on{color:#1a7a3c;border-bottom-color:#1a7a3c;font-weight:700}
+.pb2{padding:1rem}
+.pr{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem}
+.pl{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;font-weight:700}
+.stl{display:flex;gap:2px}
+.ss{font-size:26px;cursor:pointer;color:#e5e7eb;min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center}
+.ss.f{color:#f59e0b}
+.ms{width:100%;border:1px solid #ddd;border-radius:8px;padding:9px 10px;font-size:14px;font-family:inherit;background:#fff;outline:none;min-height:44px}
+textarea{width:100%;border:1px solid #ddd;border-radius:8px;padding:10px;font-size:14px;font-family:inherit;resize:vertical;line-height:1.5;outline:none}
+textarea:focus,input:focus,select:focus{border-color:#1a7a3c}
+.sr{display:flex;justify-content:flex-end;align-items:center;margin-top:.75rem;gap:8px}
+.bg{padding:10px 20px;background:#1a7a3c;color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;font-weight:700;min-height:44px}
+.sv-ok{font-size:11px;color:#1a7a3c;opacity:0;transition:opacity .3s}
+.ag{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ai{background:#f9f9f9;border-radius:10px;padding:.75rem;border:1px solid #eee}
+.an2{font-size:12px;font-weight:700;margin-bottom:6px}
+.as2{display:flex;gap:2px;margin-bottom:4px}
+.a2{font-size:20px;cursor:pointer;color:#e5e7eb;min-width:30px;min-height:30px;display:flex;align-items:center;justify-content:center}
+.a2.f{color:#f59e0b}
+.ab2{height:4px;background:#eee;border-radius:2px}
+.abf{height:4px;border-radius:2px;background:#f59e0b}
+.mg{display:flex;flex-direction:column;gap:.75rem}
+.mi label{display:block;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;font-weight:700}
+.al{display:flex;flex-direction:column;gap:6px}
+.arw{display:flex;align-items:center;gap:8px;padding:10px;background:#f9f9f9;border-radius:10px;border:1px solid #eee}
+.ad{flex:1;font-size:13px;font-weight:700}.ald{font-size:10px;color:#888;margin-top:1px}
+.as3{display:flex;gap:4px}
+.ab3{padding:7px 10px;border-radius:8px;font-size:12px;cursor:pointer;border:1px solid #ddd;background:#fff;color:#666;font-weight:600;min-height:36px;display:flex;align-items:center}
+.ab3.an.on{background:#e8f5e9;color:#1a7a3c;border-color:#1a7a3c}
+.ab3.et.on{background:#fff8e1;color:#e65100;border-color:#e65100}
+.ab3.ab.on{background:#fce4ec;color:#c0392b;border-color:#c0392b}
+.asm{font-size:12px;color:#666;padding:.625rem .875rem;background:#f5f5f5;border-radius:10px;margin-bottom:.75rem;border:1px solid #eee}
+.info-box{font-size:12px;color:#666;padding:.625rem .875rem;background:#fff8e1;border-radius:10px;margin-bottom:.75rem;border:1px solid #ffe082}
+
+/* ── Training ── */
+.trl{display:flex;flex-direction:column;gap:.75rem}
+.trs{background:#fff;border:1px solid #eee;border-radius:12px;overflow:hidden}
+.trsh{background:#f8f8f8;padding:.75rem 1rem;font-size:14px;font-weight:700;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between}
+.trsl{overflow-y:auto}
+.trsi{padding:.75rem 1rem;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;align-items:center;gap:10px;min-height:56px}
+.trsi:active{background:#f0f0f0}
+.trsi.on{background:#e8f5e9}
+.trsid{font-size:13px;font-weight:700}.trsil{font-size:11px;color:#888;margin-top:2px}
+.tradd{padding:.75rem;border-top:1px solid #eee;background:#f8f8f8;display:flex;gap:6px}
+.tradd-btn{flex:1;padding:11px 8px;background:#1a7a3c;color:#fff;border:none;border-radius:10px;font-size:13px;cursor:pointer;font-weight:700}
+.trr{background:#fff;border:1px solid #eee;border-radius:12px;overflow:hidden}
+.trrh{background:#f8f8f8;padding:.75rem 1rem;border-bottom:1px solid #eee}
+.trrht{font-size:14px;font-weight:700}.trrhs{font-size:11px;color:#888;margin-top:2px}
+.trstats{display:flex;gap:6px;padding:.5rem 1rem;background:#f0f0f0;border-bottom:1px solid #eee;flex-wrap:wrap}
+.tsc{font-size:12px;padding:3px 10px;border-radius:10px;font-weight:600}
+.tsc.an{background:#e8f5e9;color:#1a7a3c}.tsc.et{background:#fff8e1;color:#e65100}.tsc.ab{background:#fce4ec;color:#c0392b}.tsc.of{background:#f5f5f5;color:#888}
+.trag{overflow-y:auto}
+.trar{display:flex;align-items:center;padding:10px 1rem;border-bottom:1px solid #f0f0f0;gap:8px;min-height:56px}
+.trar:last-child{border-bottom:none}
+.trav{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
+.trav.g{background:#e8f5e9;color:#1a7a3c}.trav.o{background:#fff3e0;color:#e65100}
+.tran{flex:1;font-size:13px;font-weight:700;min-width:0}
+.trak{font-size:10px;font-weight:600;color:#888}
+.trab{display:flex;gap:4px}
+.trbtn{padding:8px 10px;border-radius:8px;font-size:12px;cursor:pointer;border:1px solid #ddd;background:#fff;color:#666;font-weight:600;min-height:38px;display:flex;align-items:center;white-space:nowrap}
+.trbtn.an.on{background:#e8f5e9;color:#1a7a3c;border-color:#1a7a3c}
+.trbtn.et.on{background:#fff8e1;color:#e65100;border-color:#e65100}
+.trbtn.ab.on{background:#fce4ec;color:#c0392b;border-color:#c0392b}
+.es{padding:2.5rem;text-align:center;color:#aaa;font-size:13px}
+.ds{cursor:pointer;font-size:11px;color:#bbb;padding:3px 7px;border-radius:5px;border:1px solid #eee;min-height:32px;display:flex;align-items:center}
+.ds:active{color:#c0392b;border-color:#c0392b}
+.back-btn{display:inline-flex;align-items:center;gap:5px;font-size:14px;font-weight:700;color:#1a7a3c;background:none;border:none;cursor:pointer;padding:8px 0;margin-bottom:10px;min-height:44px}
+
+/* ── Spiele ── */
+.spiele-layout{display:flex;flex-direction:column;gap:.75rem}
+.spiele-list-wrap{background:#fff;border:1px solid #eee;border-radius:12px;overflow:hidden}
+.spiele-list-hdr{background:#f8f8f8;padding:.75rem 1rem;font-size:14px;font-weight:700;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between}
+.spiele-list{overflow-y:auto}
+.spiel-item{padding:.875rem 1rem;border-bottom:1px solid #f0f0f0;cursor:pointer;transition:background .1s;min-height:60px}
+.spiel-item:active{background:#f0f0f0}
+.spiel-item.on{background:#e8f5e9}
+.spiel-item-title{font-size:14px;font-weight:700}
+.spiel-item-sub{font-size:11px;color:#888;margin-top:2px}
+.spiel-result-badge{font-size:12px;font-weight:700;padding:3px 9px;border-radius:8px;margin-top:4px;display:inline-block}
+.res-w{background:#e8f5e9;color:#1a7a3c}.res-d{background:#fff8e1;color:#e65100}.res-l{background:#fce4ec;color:#c0392b}
+.spiele-detail{background:#fff;border:1px solid #eee;border-radius:12px;overflow:hidden}
+.sd-hdr{background:#1a7a3c;color:#fff;padding:1.25rem}
+.sd-score{font-size:36px;font-weight:700;text-align:center;margin:.75rem 0 .25rem;letter-spacing:4px}
+.sd-teams{display:flex;justify-content:space-between;font-size:13px;opacity:.85}
+.sd-body{padding:1rem}
+.sd-section{margin-bottom:1.25rem}
+.sd-section-title{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:.625rem;padding-bottom:.375rem;border-bottom:1px solid #f0f0f0}
+.ts-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f9f9f9;border-radius:8px;border:1px solid #eee;margin-bottom:5px}
+.ts-av{width:28px;height:28px;border-radius:50%;background:#e8f5e9;color:#1a7a3c;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
+.ts-name{flex:1;font-size:13px;font-weight:700}
+.ts-del{cursor:pointer;color:#ccc;font-size:14px;border:none;background:none;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center}
+.add-ts-form{display:flex;gap:6px;margin-top:.5rem;flex-wrap:wrap}
+.add-ts-form select{flex:1;border:1px solid #ddd;border-radius:8px;padding:8px;font-size:13px;font-family:inherit;background:#fff;outline:none;min-height:40px}
+.add-ts-form input{width:64px;border:1px solid #ddd;border-radius:8px;padding:8px;font-size:13px;font-family:inherit;background:#fff;outline:none;min-height:40px;text-align:center}
+.add-ts-btn{padding:8px 14px;background:#1a7a3c;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:700;white-space:nowrap;min-height:40px}
+.score-inputs{display:flex;align-items:center;gap:10px}
+.score-inputs input{text-align:center;font-size:24px;font-weight:700;width:70px;border:1px solid #ddd;border-radius:8px;padding:8px;font-family:inherit;outline:none}
+.score-sep{font-size:24px;font-weight:700;color:#888}
+.new-spiel-btn{padding:9px 16px;background:#1a7a3c;color:#fff;border:none;border-radius:20px;font-size:13px;cursor:pointer;font-weight:700;min-height:40px}
+
+/* ── Modals (bottom sheet on mobile) ── */
+.modal-bg{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:300;align-items:flex-end;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:20px 20px 0 0;padding:1.25rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));width:100%;max-height:92vh;overflow-y:auto}
+.modal-handle{width:36px;height:4px;background:#ddd;border-radius:2px;margin:0 auto 1rem}
+.modal-title{font-size:17px;font-weight:700;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between}
+.modal-close{cursor:pointer;font-size:24px;color:#999;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;margin-right:-8px}
+.form-group{margin-bottom:.875rem}
+.form-group label{display:block;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;font-weight:700}
+.form-group input,.form-group select,.form-group textarea{width:100%;border:1px solid #ddd;border-radius:10px;padding:11px 12px;font-size:16px;font-family:inherit;outline:none}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:#1a7a3c}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:.625rem}
+.modal-actions{display:flex;gap:8px;justify-content:stretch;margin-top:1.25rem}
+.modal-actions .btn-cancel,.modal-actions .btn-save,.modal-actions .btn-danger{flex:1;text-align:center}
+.btn-cancel{padding:13px 14px;background:#f5f5f5;color:#666;border:1px solid #ddd;border-radius:12px;font-size:15px;cursor:pointer;font-weight:600}
+.btn-save{padding:13px 16px;background:#1a7a3c;color:#fff;border:none;border-radius:12px;font-size:15px;cursor:pointer;font-weight:700}
+.btn-danger{padding:13px 14px;background:#c0392b;color:#fff;border:none;border-radius:12px;font-size:15px;cursor:pointer;font-weight:700}
+
+/* ── Weltmeister ── */
+.wm-podium-row{display:flex;align-items:flex-end;justify-content:center;gap:10px;margin-bottom:1rem;padding:1rem .5rem}
+
+/* ── Desktop overrides ── */
+@media(min-width:680px){
+  .app{padding:1rem}
+  .mtabs{position:static;border-top:none;border:1px solid #ddd;border-radius:10px;margin-bottom:1rem;padding-bottom:0}
+  .mt{flex-direction:row;gap:5px;padding:10px 6px;font-size:12px}
+  .mt-icon{font-size:15px}
+  .page-wrap{padding-bottom:0}
+  .trl{display:grid;grid-template-columns:240px 1fr}
+  .spiele-layout{display:grid;grid-template-columns:260px 1fr}
+  .modal-bg{align-items:center}
+  .modal{border-radius:14px;width:420px;max-width:95%;max-height:90vh;padding:1.25rem}
+  .modal-handle{display:none}
+  .modal-actions{justify-content:flex-end}
+  .modal-actions .btn-cancel,.modal-actions .btn-save,.modal-actions .btn-danger{flex:none}
+  .player-cards{display:block}
+  /* Desktop: keep table */
+  .tw{display:block}
+  .player-cards{display:none}
+}
+@media(max-width:679px){
+  .tw{display:none}
+  .player-cards{display:flex}
+  .hdr-sub{display:none}
+}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div style="font-size:48px;margin-bottom:.5rem">⚽</div>
+  <div class="spin"></div>
+  <div style="font-size:14px;color:#333;font-weight:600;margin-top:.5rem">VfB Leimen · Co-Trainer</div>
+  <div id="load-status" style="font-size:12px;color:#888;margin-top:4px">Lade Daten...</div>
+</div>
+
+<div class="app" id="mainapp" style="display:none">
+
+  <div class="hdr">
+    <div style="font-size:30px">⚽</div>
+    <div class="hdr-info">
+      <div class="hdr-title">VfB Leimen · Jahrgang 2017</div>
+      <div class="hdr-sub">Kader · Training · Spiele</div>
+    </div>
+    <div class="live-badge"><div class="ldot" id="ldot"></div><span id="llbl">Live</span></div>
+  </div>
+
+  <!-- Desktop tabs (hidden on mobile, shown via CSS) -->
+  <div class="mtabs">
+    <div class="mt on" onclick="sw('kader')"><span class="mt-icon">🗂</span>Kader</div>
+    <div class="mt" onclick="sw('training')"><span class="mt-icon">📋</span>Training</div>
+    <div class="mt" onclick="sw('spiele')"><span class="mt-icon">⚽</span>Spiele</div>
+    <div class="mt" onclick="sw('hausaufgaben')"><span class="mt-icon">📚</span>Hausaufgaben</div>
+    <div class="mt" onclick="sw('weltmeister')"><span class="mt-icon">🏆</span>Weltmeister</div>
+  </div>
+
+  <!-- KADER -->
+  <div id="vk" class="page-wrap">
+    <div class="srow" id="srow"></div>
+    <!-- Filter pills - horizontal scroll -->
+    <div class="tb">
+      <div class="fb on-g" onclick="sf('alle')">Alle</div>
+      <div class="fb" onclick="sf('stark')">★ Stark</div>
+      <div class="fb" onclick="sf('mittel')">◆ Mittel</div>
+      <div class="fb" onclick="sf('schwach')">▽ Schwach</div>
+      <div class="fb" onclick="sf('inaktiv')">○ Inaktiv</div>
+      <div class="fb" onclick="sf('offen')">⚠ Anm.</div>
+    </div>
+    <!-- Search + sort + add -->
+    <div class="search-row">
+      <input class="srch" id="q" placeholder="🔍 Name suchen..." oninput="rt()"/>
+      <select class="srt" id="srt" onchange="rt()">
+        <option value="name">A–Z</option>
+        <option value="kat">Kat.</option>
+        <option value="dob">Alter</option>
+      </select>
+      <button class="add-player-btn" onclick="openM('modal-player')">+ Neu</button>
+    </div>
+    <!-- Mobile: card list -->
+    <div class="player-cards" id="pc"></div>
+    <!-- Desktop: table -->
+    <div class="tw"><table>
+      <thead><tr>
+        <th style="width:26px">#</th><th>Spieler</th><th style="width:88px">Geb.-Datum</th>
+        <th style="width:34px">Nat.</th><th style="width:50px">Pos.</th>
+        <th style="width:85px">Status</th><th style="width:98px">Kategorie</th>
+        <th style="width:58px">Anwes.</th><th style="width:24px"></th><th style="width:24px"></th>
+      </tr></thead>
+      <tbody id="tb"></tbody>
+    </table></div>
+    <div id="pnl" style="display:none" class="pnl"></div>
+  </div>
+
+  <!-- TRAINING -->
+  <div id="vt" style="display:none" class="page-wrap">
+    <div class="trl">
+      <div class="trs">
+        <div class="trsh">
+          <span>Trainingseinheiten</span>
+        </div>
+        <div class="trsl" id="sl"></div>
+        <div class="tradd">
+          <button class="tradd-btn" onclick="openModalT('modal-single')">+ Einzeltermin</button>
+          <button class="tradd-btn" style="background:#1565c0" onclick="openModalT('modal-serie')">↻ Serientermin</button>
+        </div>
+      </div>
+      <div class="trr" id="tr"><div class="es">⬆ Trainingseinheit auswählen</div></div>
+    </div>
+  </div>
+
+  <!-- SPIELE -->
+  <div id="vs" style="display:none" class="page-wrap">
+    <div class="spiele-layout">
+      <div class="spiele-list-wrap">
+        <div class="spiele-list-hdr">
+          <span>Spiele & Turniere</span>
+          <button class="new-spiel-btn" onclick="openNewSpielModal()">+ Neu</button>
+        </div>
+        <div class="spiele-list" id="spiele-list"></div>
+      </div>
+      <div class="spiele-detail" id="spiele-detail"><div class="es">⬆ Spiel auswählen</div></div>
+    </div>
+  </div>
+
+  <!-- HAUSAUFGABEN -->
+  <div id="vhw" style="display:none" class="page-wrap">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div>
+        <div style="font-size:15px;font-weight:700">📚 Sport-Hausaufgaben</div>
+        <div style="font-size:12px;color:#888;margin-top:2px">Aufgaben vergeben & per WhatsApp an Eltern senden</div>
+      </div>
+      <button onclick="openNewHW()" style="padding:6px 14px;background:#1a7a3c;color:#fff;border:none;border-radius:20px;font-size:12px;cursor:pointer;font-weight:700">+ Neue Aufgabe</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">
+      <button class="fb on-g" id="hwf-alle"    onclick="hwFilter('alle')">Alle</button>
+      <button class="fb"      id="hwf-offen"   onclick="hwFilter('offen')">⏳ Offen</button>
+      <button class="fb"      id="hwf-erledigt" onclick="hwFilter('erledigt')">✓ Erledigt</button>
+      <input class="srch" id="hw-search" placeholder="Spieler suchen..." oninput="renderHW()" style="max-width:200px"/>
+    </div>
+    <div id="hw-list" style="display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+
+  <!-- WELTMEISTER -->
+  <div id="vwm" style="display:none" class="page-wrap">
+    <div style="background:#fff;border:1px solid #eee;border-radius:12px;overflow:hidden">
+      <div style="background:linear-gradient(135deg,#1a7a3c,#2ecc71);padding:1.25rem 1.5rem;color:#fff">
+        <div style="font-size:18px;font-weight:700">🏆 Trainingsweltmeister</div>
+        <div style="font-size:12px;opacity:.85;margin-top:2px">Rangliste nach Anwesenheitsquote</div>
+      </div>
+      <div style="padding:.75rem 1rem;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid #eee">
+        <select id="wm-filter" onchange="renderWM()" style="border:1px solid #ddd;border-radius:8px;padding:8px 10px;font-size:14px;outline:none;background:#fff;min-height:40px">
+          <option value="all">Gesamte Saison</option>
+          <option value="last10">Letzte 10 Einheiten</option>
+          <option value="last5">Letzte 5 Einheiten</option>
+        </select>
+        <select id="wm-kat" onchange="renderWM()" style="border:1px solid #ddd;border-radius:8px;padding:8px 10px;font-size:14px;outline:none;background:#fff;min-height:40px">
+          <option value="all">Alle Kategorien</option>
+          <option value="stark">Nur Stark</option>
+          <option value="mittel">Nur Mittel</option>
+          <option value="schwach">Nur Schwach</option>
+        </select>
+      </div>
+      <div id="wm-podium" style="padding:1.5rem 1rem 1rem"></div>
+      <div style="border-top:1px solid #eee">
+        <div style="background:#f8f8f8;padding:.5rem 1rem;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px">Vollständige Rangliste</div>
+        <div id="wm-list"></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<!-- Mobile bottom navigation bar -->
+<nav class="mtabs" id="mobile-nav">
+  <button class="mt on" onclick="sw('kader')"><span class="mt-icon">🗂</span>Kader</button>
+  <button class="mt" onclick="sw('training')"><span class="mt-icon">📋</span>Training</button>
+  <button class="mt" onclick="sw('spiele')"><span class="mt-icon">⚽</span>Spiele</button>
+  <button class="mt" onclick="sw('hausaufgaben')"><span class="mt-icon">📚</span>HW</button>
+  <button class="mt" onclick="sw('weltmeister')"><span class="mt-icon">🏆</span>WM</button>
+</nav>
+
+<!-- MODALS -->
+<div class="modal-bg" id="modal-single">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">+ Einzeltermin <span class="modal-close" onclick="closeM('modal-single')">×</span></div>
+    <div class="form-group"><label>Datum</label><input type="date" id="s-date"/></div>
+    <div class="form-group"><label>Bezeichnung</label><input id="s-label" placeholder="z.B. Techniktraining"/></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeM('modal-single')">Abbrechen</button>
+      <button class="btn-save" onclick="addSingle()">Hinzufügen</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-serie">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">↻ Serientermin <span class="modal-close" onclick="closeM('modal-serie')">×</span></div>
+    <div class="form-group"><label>Bezeichnung</label><input id="sr-label" placeholder="z.B. Dienstagstraining"/></div>
+    <div class="form-group"><label>Wochentag</label>
+      <select id="sr-day">
+        <option value="1">Montag</option><option value="2">Dienstag</option>
+        <option value="3">Mittwoch</option><option value="4">Donnerstag</option>
+        <option value="5">Freitag</option><option value="6">Samstag</option><option value="0">Sonntag</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Von</label><input type="date" id="sr-from"/></div>
+      <div class="form-group"><label>Bis</label><input type="date" id="sr-to"/></div>
+    </div>
+    <div class="form-group"><label>Uhrzeit (optional)</label><input type="time" id="sr-time" value="17:00"/></div>
+    <div id="sr-preview" style="font-size:13px;color:#1a7a3c;min-height:16px;font-weight:600"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeM('modal-serie')">Abbrechen</button>
+      <button class="btn-save" onclick="addSerie()">Alle anlegen</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-player">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Spieler hinzufügen <span class="modal-close" onclick="closeM('modal-player')">×</span></div>
+    <div class="form-row">
+      <div class="form-group"><label>Vorname</label><input id="np-first" placeholder="Vorname"/></div>
+      <div class="form-group"><label>Nachname</label><input id="np-last" placeholder="Nachname"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Geburtsdatum</label><input id="np-dob" type="date"/></div>
+      <div class="form-group"><label>Nationalität</label><input id="np-nat" value="D"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Position</label>
+        <select id="np-pos"><option value="FP">Feldspieler</option><option value="TW">Torwart</option></select>
+      </div>
+      <div class="form-group"><label>Status</label>
+        <select id="np-reg">
+          <option value="true">✓ Spielberechtigt</option>
+          <option value="false">⚠ Noch anmelden</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeM('modal-player')">Abbrechen</button>
+      <button class="btn-save" onclick="saveNewPlayer()">Hinzufügen</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-del">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Spieler löschen? <span class="modal-close" onclick="closeM('modal-del')">×</span></div>
+    <p style="font-size:14px;color:#555;margin-bottom:1rem" id="del-msg"></p>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeM('modal-del')">Abbrechen</button>
+      <button class="btn-danger" onclick="confirmDelete()">Löschen</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-spiel">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">⚽ Neuer Spieltag <span class="modal-close" onclick="closeM('modal-spiel')">×</span></div>
+
+    <!-- Datum & Format -->
+    <div class="form-row">
+      <div class="form-group"><label>Datum</label><input type="date" id="ns-date"/></div>
+      <div class="form-group"><label>Spielformat</label><input id="ns-format" placeholder="z.B. 3-gegen-3, 7-gegen-7"/></div>
+    </div>
+
+    <!-- Gastgeber aus Adressbuch oder neu -->
+    <div class="form-group">
+      <label>Gastgeber (Adressbuch)</label>
+      <select id="ns-venue-sel" onchange="onNewSpielVenue()" style="width:100%;border:1px solid #ddd;border-radius:10px;padding:11px 12px;font-size:16px;font-family:inherit;outline:none;background:#fff">
+        <option value="">– Gastgeber wählen oder neu eingeben –</option>
+      </select>
+    </div>
+
+    <!-- Venue Felder (ausfüllbar) -->
+    <div class="form-group"><label>Gastgeber / Verein</label><input id="ns-gastgeber" placeholder="z.B. SV Balzfeld"/></div>
+    <div class="form-group"><label>Straße</label><input id="ns-strasse" placeholder="z.B. Schleimwiesen 1"/></div>
+    <div class="form-row">
+      <div class="form-group"><label>PLZ</label><input id="ns-plz" placeholder="69234"/></div>
+      <div class="form-group"><label>Ort</label><input id="ns-ort" placeholder="Dielheim"/></div>
+    </div>
+
+    <!-- Treffpunkte -->
+    <div class="form-row">
+      <div class="form-group"><label>Treffpunkt Team 1</label><input id="ns-time1" placeholder="z.B. 08:45 Uhr"/></div>
+      <div class="form-group"><label>Treffpunkt Team 2</label><input id="ns-time2" placeholder="z.B. 10:15 Uhr"/></div>
+    </div>
+    <div class="form-group"><label>Treffpunkt Team 3 (optional)</label><input id="ns-time3" placeholder="z.B. 11:45 Uhr"/></div>
+
+    <div class="form-group"><label>Hinweis (optional)</label><input id="ns-hinweis" placeholder="z.B. Bitte grüne Trikots mitbringen"/></div>
+
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:.875rem">
+      <input type="checkbox" id="ns-save-venue" checked style="width:18px;height:18px;accent-color:#1a7a3c;cursor:pointer"/>
+      <label for="ns-save-venue" style="font-size:13px;color:#555;cursor:pointer">Gastgeber im Adressbuch speichern</label>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeM('modal-spiel')">Abbrechen</button>
+      <button class="btn-save" onclick="saveNewSpiel()">Spieltag anlegen</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-hw">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Hausaufgabe vergeben <span class="modal-close" onclick="closeM('modal-hw')">x</span></div>
+    <div class="form-group"><label>Spieler</label><select id="hw-player"></select></div>
+    <div class="form-group"><label>Vorlage</label>
+      <select id="hw-template" onchange="applyHWT()">
+        <option value="">-- eigene Aufgabe eingeben --</option>
+        <option value="Taeglich 10 Min. mit dem schwachen Fuss an der Wand passen (mind. 50 Kontakte)">Schwacher Fuss - Passwand 10 Min.</option>
+        <option value="Taeglich 15 Min. Dribbling mit Huetchen: Slalom, Tempodribbling, Richtungswechsel">Dribbling mit Huetchen 15 Min.</option>
+        <option value="20 Liegestuetze + 20 Sit-Ups + 20 Kniebeugen taeglich fuer Koerperstabilitaet">Kraftuebungen 20/20/20 taeglich</option>
+        <option value="Jonglieren 10 Min. taeglich - Ziel: 50 Kontakte in Folge, abwechselnd beide Fuesse">Jonglieren - taeglich 10 Min.</option>
+        <option value="15 Min. locker laufen zur Grundlagenausdauer - gleichmaessiges Tempo halten">Ausdauerlauf 15 Min.</option>
+        <option value="Taeglich 5 Min. Dehnen: Oberschenkel, Wade, Huefte, Schulter">Dehnen und Beweglichkeit 5 Min.</option>
+        <option value="Torschuss ueben: 20 Schuesse taeglich - abwechselnd links und rechts auf Tor oder Wand">Torschuss - 20x taeglich beide Fuesse</option>
+        <option value="Seilspringen 10 Min. taeglich fuer Koordination und Sprungkraft">Seilspringen 10 Min. taeglich</option>
+        <option value="1v1-Dribbling taeglich gegen Familienmitglied - 10 Duelle, Fokus auf Koerpertaeuschung">1v1-Dribbling - 10 Duelle taeglich</option>
+        <option value="Ball gegen die Wand werfen und mit beiden Haenden abfangen - 5 Min. Reaktionsuebung">Reaktion - Wand-Abfang 5 Min.</option>
+        <option value="Kopfball ueben: Ball hochwerfen und koepfen - taeglich 5 Min.">Kopfball ueben - taeglich 5 Min.</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Aufgabe</label>
+      <textarea id="hw-desc" rows="3" placeholder="Beschreibe die Uebung genau..."></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Bis wann?</label><input type="date" id="hw-due"/></div>
+      <div class="form-group"><label>Haeufigkeit</label>
+        <select id="hw-freq">
+          <option value="taeglich">Taeglich</option>
+          <option value="3x pro Woche">3x pro Woche</option>
+          <option value="2x pro Woche">2x pro Woche</option>
+          <option value="einmalig">Einmalig</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeM('modal-hw')">Abbrechen</button>
+      <button class="btn-save" onclick="saveHW()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Gastgeber / Venue -->
+<div class="modal-bg" id="modal-venue">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Gastgeber hinzufuegen <span class="modal-close" onclick="closeM('modal-venue')">x</span></div>
+    <div class="form-group"><label>Name des Vereins / Orts</label><input id="venue-name" placeholder="z.B. SV Balzfeld"/></div>
+    <div class="form-group"><label>Strasse</label><input id="venue-addr" placeholder="z.B. Schleimwiesen 1"/></div>
+    <div class="form-group"><label>PLZ und Ort</label><input id="venue-plzort" placeholder="z.B. 69234 Dielheim"/></div>
+    <div class="form-group"><label>Treffpunkt (optional)</label><input id="venue-meet" placeholder="z.B. Parkplatz Haupteingang"/></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeM('modal-venue')">Abbrechen</button>
+      <button class="btn-save" onclick="saveVenue()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DATEN ─────────────────────────────────────────────────
+const STATIC_PLAYERS = [
+  {id:"p01",f:"Mouhamad",l:"Al-Khalaf",d:"07.04.2017",n:"SYR",p:"FP",r:true},
+  {id:"p02",f:"Adam",l:"Almousa",d:"27.04.2017",n:"D",p:"FP",r:true},
+  {id:"p03",f:"Maxim",l:"Ayhan",d:"01.12.2017",n:"D",p:"FP",r:true},
+  {id:"p04",f:"Lukas",l:"Bauer",d:"26.04.2017",n:"D",p:"FP",r:true},
+  {id:"p05",f:"Dorian",l:"Bernotas",d:"08.02.2018",n:"LT",p:"FP",r:true},
+  {id:"p06",f:"Lennard",l:"Biener",d:"29.06.2017",n:"D",p:"FP",r:true},
+  {id:"p07",f:"Micha",l:"Boiko",d:"—",n:"D",p:"TW",r:false},
+  {id:"p08",f:"Elja",l:"Can",d:"—",n:"D",p:"FP",r:false},
+  {id:"p09",f:"Jeshua",l:"Can",d:"—",n:"D",p:"FP",r:false},
+  {id:"p10",f:"Donjel",l:"Can",d:"—",n:"D",p:"FP",r:false},
+  {id:"p11",f:"Homam",l:"Daoud",d:"26.09.2017",n:"D",p:"FP",r:true},
+  {id:"p12",f:"Bachir",l:"Dib",d:"03.03.2019",n:"D",p:"FP",r:true},
+  {id:"p13",f:"Mathis",l:"Disdorn",d:"16.11.2017",n:"D",p:"FP",r:true},
+  {id:"p14",f:"Jack",l:"Durra",d:"30.03.2019",n:"D",p:"FP",r:true},
+  {id:"p15",f:"Yunus-Emre",l:"Eyüpoglu",d:"27.01.2017",n:"D",p:"FP",r:true},
+  {id:"p16",f:"Finn",l:"Filsinger",d:"17.02.2017",n:"D",p:"FP",r:true},
+  {id:"p17",f:"Aram",l:"Ghareeb",d:"05.07.2018",n:"IRQ",p:"FP",r:true},
+  {id:"p18",f:"Constantin",l:"Hahn",d:"20.07.2017",n:"D",p:"FP",r:false},
+  {id:"p19",f:"Raphael",l:"Hell",d:"08.11.2017",n:"D",p:"FP",r:true},
+  {id:"p20",f:"Milan",l:"Hergert",d:"—",n:"D",p:"FP",r:false},
+  {id:"p21",f:"Philip",l:"Hristov",d:"25.04.2017",n:"D",p:"FP",r:true},
+  {id:"p22",f:"Clarita",l:"Iki Akjian",d:"13.05.2017",n:"D",p:"FP",r:true},
+  {id:"p23",f:"Tim",l:"Kentischer",d:"18.11.2017",n:"D",p:"FP",r:true},
+  {id:"p24",f:"Oleksandr",l:"Khioare",d:"13.09.2017",n:"UA",p:"FP",r:true},
+  {id:"p25",f:"Simeon",l:"Kichukov",d:"09.07.2017",n:"BG",p:"FP",r:true},
+  {id:"p26",f:"Georg",l:"Klarmann",d:"—",n:"D",p:"FP",r:false},
+  {id:"p27",f:"Leo",l:"Kogler",d:"—",n:"D",p:"FP",r:false},
+  {id:"p28",f:"Julius",l:"Lätsch",d:"26.03.2019",n:"D",p:"FP",r:true},
+  {id:"p29",f:"Ilyas",l:"Meftah",d:"03.03.2018",n:"D",p:"FP",r:true},
+  {id:"p30",f:"Nico",l:"Möll",d:"19.02.2017",n:"D",p:"TW",r:true},
+  {id:"p31",f:"Vladislav",l:"Mussabek",d:"17.12.2017",n:"D",p:"FP",r:true},
+  {id:"p33",f:"Simeon",l:"Sattler",d:"08.01.2017",n:"D",p:"FP",r:true},
+  {id:"p34",f:"Jakob",l:"Schicker",d:"22.06.2017",n:"D",p:"FP",r:true},
+  {id:"p35",f:"Maris",l:"Schmidt",d:"08.04.2017",n:"D",p:"FP",r:true},
+  {id:"p36",f:"Liam",l:"Soumpholphakdy",d:"07.06.2017",n:"D",p:"TW",r:true},
+  {id:"p37",f:"Jonas",l:"Stockmann",d:"—",n:"D",p:"TW",r:false},
+  {id:"p38",f:"Raphael",l:"Tetzl",d:"—",n:"D",p:"FP",r:false},
+  {id:"p39",f:"Lazar",l:"Todoric",d:"—",n:"D",p:"FP",r:false},
+  {id:"p40",f:"Emanuel",l:"Toko",d:"16.07.2017",n:"D",p:"FP",r:true},
+  {id:"p41",f:"Ramon",l:"Toko",d:"13.07.2017",n:"D",p:"FP",r:true},
+  {id:"p42",f:"Elia",l:"Touma",d:"01.03.2017",n:"D",p:"FP",r:true},
+  {id:"p43",f:"Daniel",l:"Wolf",d:"01.08.2017",n:"D",p:"FP",r:true},
+  {id:"p44",f:"Naim",l:"Yildirim",d:"12.12.2017",n:"D",p:"FP",r:true},
+  {id:"p45",f:"Yusuf",l:"—",d:"—",n:"D",p:"FP",r:false,nx:true},
+];
+// ── 5 Bewertungskategorien (fix definiert) ────────────────
+const RATING_CATS = [
+  { id:"technik",     icon:"⚽", name:"Technik",              desc:"Ballkontrolle, Touch, Passspiel" },
+  { id:"spielverst",  icon:"🧠", name:"Spielverständnis",     desc:"Positionsspiel, Entscheidungen, Teamplay" },
+  { id:"einsatz",     icon:"💪", name:"Einsatz & Mentalität", desc:"Ehrgeiz, Einstellung, Lernbereitschaft" },
+  { id:"athletik",    icon:"🏃", name:"Athletik",             desc:"Schnelligkeit, Zweikampf, Ausdauer" },
+  { id:"abschluss",   icon:"🥅", name:"Abschluss & Dribbling",desc:"Torabschluss, 1v1, Dribbling" },
+];
+// Auto-Einstufung: ∅ ≥ 4.0 → stark | ≥ 2.5 → mittel | < 2.5 → schwach
+function autoKat(ratings){
+  const vals=Object.values(ratings||{}).filter(v=>v>0);
+  if(!vals.length) return "";
+  const avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+  return avg>=4?"stark":avg>=2.5?"mittel":"schwach";
+}
+
+const KC={stark:{l:"★ Stark",c:"#1a7a3c"},mittel:{l:"◆ Mittel",c:"#1565c0"},schwach:{l:"▽ Schwach",c:"#e65100"},inaktiv:{l:"○ Inaktiv",c:"#888"},"":{l:"– offen",c:"#aaa"}};
+const MEDALS=["🥇","🥈","🥉"];
+
+let PLAYERS=[...STATIC_PLAYERS],PS={},SS=[],SPIELE={},HW={},ATT_CACHE={},VENUES={};
+let SEL=null,PT="profil",FT="alle",SSL=null,STR=0,CV="kader",DEL_ID=null,SEL_SPIEL=null,HW_FILTER="alle";
+
+const ii=(f,l)=>(f[0]+(l&&l!=="—"?l[0]:f[1]||"?")).toUpperCase();
+
+// ── INIT ──────────────────────────────────────────────────
+async function init(){
+  // Alle Quellen parallel laden
+  const [plData, pd, sd, spd, ad, hwd, venData] = await Promise.all([
+    fbGet("players_list"), fbGet("players"), fbGet("sessions"),
+    fbGet("spiele"), fbGet("att"), fbGet("hausaufgaben"), fbGet("venues")
+  ]);
+
+  // Erster Start: Spielerliste in Firebase hochladen (Einmalig-Seed)
+  let playersList = plData;
+  if (!playersList) {
+    const seed = {};
+    STATIC_PLAYERS.forEach(p => {
+      seed[p.id] = {f:p.f, l:p.l, d:p.d, n:p.n, p:p.p, r:p.r};
+    });
+    await fbSet("players_list", seed);
+    playersList = seed;
+  }
+
+  // PLAYERS immer aus Firebase aufbauen (nie aus STATIC_PLAYERS direkt)
+  PLAYERS = Object.entries(playersList).map(([id, data]) => ({...data, id}));
+  PLAYERS.sort((a,b) => (a.l+a.f).localeCompare(b.l+b.f,"de"));
+
+  PLAYERS.forEach(p => {
+    PS[p.id] = {k:"",rt:0,nt:"",po:p.p,at:{},mz:{sw:"",ub:"",kf:"",zl:""}};
+    if(pd?.[p.id]) Object.assign(PS[p.id], pd[p.id]);
+    if(!PS[p.id].at)  PS[p.id].at={};
+    if(!PS[p.id].mz)  PS[p.id].mz={sw:"",ub:"",kf:"",zl:""};
+  });
+
+  SS = sd ? Object.values(sd).sort((a,b)=>a.id.localeCompare(b.id)) : [];
+  ATT_CACHE = ad || {}; SPIELE = spd || {}; HW = hwd || {}; VENUES = venData || {};
+  calcPct();
+  document.getElementById("loading").style.display = "none";
+  document.getElementById("mainapp").style.display = "block";
+  ra();
+
+  // Live listeners
+  fbListen(".info/connected", v => {
+    document.getElementById("ldot").style.background = v ? "#4caf50" : "#f44336";
+    document.getElementById("llbl").textContent = v ? "Live ●" : "Offline";
+  });
+  // Spielerliste live halten (Hinzufügen / Löschen durch andere Trainer)
+  fbListen("players_list", d => {
+    if(!d) return;
+    PLAYERS = Object.entries(d).map(([id, data]) => ({...data, id}));
+    PLAYERS.sort((a,b) => (a.l+a.f).localeCompare(b.l+b.f,"de"));
+    PLAYERS.forEach(p => { if(!PS[p.id]) PS[p.id]={k:"",rt:0,nt:"",po:p.p||"FP",at:{},mz:{sw:"",ub:"",kf:"",zl:""}}; });
+    calcPct(); ra();
+  });
+  fbListen("players", d => {
+    if(!d) return;
+    Object.entries(d).forEach(([id,v]) => {
+      if(!PS[id]) PS[id]={k:"",rt:0,nt:"",po:"FP",at:{},mz:{sw:"",ub:"",kf:"",zl:""}};
+      Object.assign(PS[id], v);
+    });
+    calcPct(); ra();
+  });
+  fbListen("sessions", d => { SS=d?Object.values(d).sort((a,b)=>a.id.localeCompare(b.id)):[];calcPct();ra();if(CV==="training")rSL(); });
+  fbListen("att", d => { if(d){ATT_CACHE=d;calcPct();if(CV==="training"&&SSL)rAG(SSL);} });
+  fbListen("spiele", d => { SPIELE=d||{};if(CV==="spiele")renderSpiele(); });
+  fbListen("hausaufgaben", d => { HW=d||{};if(CV==="hausaufgaben")renderHW(); });
+  fbListen("venues", d => { VENUES=d||{}; });
+}
+function calcPct(){PLAYERS.forEach(p=>{if(!PS[p.id])PS[p.id]={k:"",rt:0,nt:"",po:p.p||"FP",at:{},mz:{sw:"",ub:"",kf:"",zl:""}};if(!SS.length){PS[p.id]._pct=null;return;}let an=0;SS.forEach(s=>{if(ATT_CACHE[s.id]?.[p.id]==="an")an++;});PS[p.id]._pct=Math.round(an/SS.length*100);});}
+async function sp(id){await fbSet("players/"+id,PS[id]);}
+async function svSS(){const o={};SS.forEach(s=>o[s.id]=s);await fbSet("sessions",o);}
+async function gA(sid){if(ATT_CACHE[sid])return ATT_CACHE[sid];const a=await fbGet("att/"+sid)||{};ATT_CACHE[sid]=a;return a;}
+async function sA(sid,att){ATT_CACHE[sid]=att;await fbSet("att/"+sid,att);}
+function ra(){rs();rt();if(SEL)rp(SEL);}
+function rs(){
+  const c={stark:0,mittel:0,schwach:0,inaktiv:0};
+  PLAYERS.forEach(p=>{const k=PS[p.id]?.k||"";if(c[k]!==undefined)c[k]++;});
+  document.getElementById("srow").innerHTML=`
+    <div class="sc"><div class="sn">${PLAYERS.length}</div><div class="sl">Kader</div></div>
+    <div class="sc"><div class="sn g">${c.stark}</div><div class="sl">Stark</div></div>
+    <div class="sc"><div class="sn b">${c.mittel}</div><div class="sl">Mittel</div></div>
+    <div class="sc"><div class="sn o">${c.schwach}</div><div class="sl">Schwach</div></div>
+    <div class="sc"><div class="sn gr">${c.inaktiv}</div><div class="sl">Inaktiv</div></div>`;
+}
+function sf(f){
+  FT=f;
+  const cols={alle:"on-g",stark:"on-g",mittel:"on-b",schwach:"on-o",inaktiv:"on-gr",offen:"on-r"};
+  document.querySelectorAll(".tb .fb").forEach((b,i)=>{
+    const fs=["alle","stark","mittel","schwach","inaktiv","offen"];
+    b.className="fb"; if(fs[i]===f) b.classList.add(cols[f]);
+  });
+  rt();
+}
+function rt(){
+  const q=(document.getElementById("q")?.value||"").toLowerCase();
+  const srt=document.getElementById("srt")?.value||"name";
+  let list=PLAYERS.filter(p=>{
+    const k=PS[p.id]?.k||"";
+    if(FT==="stark"&&k!=="stark")return false;
+    if(FT==="mittel"&&k!=="mittel")return false;
+    if(FT==="schwach"&&k!=="schwach")return false;
+    if(FT==="inaktiv"&&k!=="inaktiv")return false;
+    if(FT==="offen"&&p.r===true)return false;
+    if(q&&!(p.f+" "+p.l).toLowerCase().includes(q))return false;
+    return true;
+  });
+  list.sort((a,b)=>{
+    if(srt==="name")return(a.l+a.f).localeCompare(b.l+b.f,"de");
+    if(srt==="kat"){const o={stark:1,mittel:2,schwach:3,inaktiv:4,"":5};return(o[PS[a.id]?.k||""]||5)-(o[PS[b.id]?.k||""]||5);}
+    if(srt==="dob"){const f=s=>{if(!s||s==="—")return 99999999;const[d,m,y]=s.split(".");return+y*10000+ +m*100+ +d};return f(a.d)-f(b.d);}
+  });
+  const KC_CLS={stark:"kat-stark",mittel:"kat-mittel",schwach:"kat-schwach",inaktiv:"kat-inaktiv"};
+  const KC_LBL={stark:"★ Stark",mittel:"◆ Mittel",schwach:"▽ Schwach",inaktiv:"○ Inaktiv","":" "};
+  // Mobile cards
+  const pc=document.getElementById("pc");
+  if(pc) pc.innerHTML=list.map(p=>{
+    const ps=PS[p.id]||{},po=ps.po||p.p,k=ps.k||"",pct=ps._pct;
+    return`<div class="pcard${SEL===p.id?" sel":""}${!p.r?" unreg":""}" onclick="selP('${p.id}')">
+      <div class="pcav ${po==="TW"?"o":"g"}">${ii(p.f,p.l)}</div>
+      <div class="pc-info">
+        <div class="pc-name">${p.l!=="—"?p.l+",":""} ${p.f}${po==="TW"?` <span style="font-size:10px;background:#fff3e0;color:#e65100;padding:1px 5px;border-radius:6px;font-weight:700">TW</span>`:""}</div>
+        <div class="pc-sub">
+          ${k?`<span class="kat-badge ${KC_CLS[k]||""}">${KC_LBL[k]}</span>`:""}
+          ${p.r===true?`<span class="reg-ok">✓</span>`:`<span class="reg-no">⚠ Anm.</span>`}
+          ${p.d&&p.d!=="—"?`<span>${p.d}</span>`:""}
+        </div>
+      </div>
+      <div class="pc-right">
+        ${pct!=null?`<div class="pc-pct">${pct}%</div><div class="pc-bar"><div class="pc-bar-fill" style="width:${pct}%"></div></div>`:`<span style="color:#ccc;font-size:11px">—</span>`}
+        <button onclick="event.stopPropagation();askDelete('${p.id}')" style="font-size:16px;color:#ddd;background:none;border:none;cursor:pointer;padding:4px;margin-top:2px;min-width:36px;min-height:36px">🗑</button>
+      </div>
+    </div>`;
+  }).join("");
+  // Desktop table
+  document.getElementById("tb").innerHTML=list.map((p,i)=>{
+    const ps=PS[p.id]||{},po=ps.po||p.p,k=ps.k||"",kc=KC[k],pct=ps._pct;
+    return`<tr class="${SEL===p.id?"sl":p.r===true?"":"ur"}" onclick="selP('${p.id}')">
+      <td style="color:#bbb;font-size:10px">${i+1}</td>
+      <td><div class="nc"><div class="av ${po==="TW"?"avA":"avG"}">${ii(p.f,p.l)}</div>
+        <div><div class="pn">${p.l!=="—"?p.l+",":""} ${p.f}${po==="TW"?`<span class="bdgT">TW</span>`:""}</div>
+        ${ps.nt?`<div class="ns">${ps.nt}</div>`:""}</div></div></td>
+      <td style="font-size:11px;color:#888">${p.d}</td><td><span class="nb">${p.n}</span></td>
+      <td><select class="ks" onclick="event.stopPropagation()" onchange="sPo('${p.id}',this.value)">
+        <option value="FP"${po==="FP"?" selected":""}>FP</option><option value="TW"${po==="TW"?" selected":""}>TW</option>
+      </select></td>
+      <td>${p.r===true?`<span class="rok">✓</span>`:`<span class="rno">⚠ Anm.</span>`}</td>
+      <td><select class="ks" onclick="event.stopPropagation()" onchange="sK('${p.id}',this.value)" style="color:${kc.c};font-weight:${k?700:400}">
+        <option value=""${k===""?" selected":""}>– offen</option>
+        <option value="stark"${k==="stark"?" selected":""}>★ Stark</option>
+        <option value="mittel"${k==="mittel"?" selected":""}>◆ Mittel</option>
+        <option value="schwach"${k==="schwach"?" selected":""}>▽ Schwach</option>
+        <option value="inaktiv"${k==="inaktiv"?" selected":""}>○ Inaktiv</option>
+      </select></td>
+      <td>${pct!=null?`<div style="font-size:11px;font-weight:700;color:#555">${pct}%</div><div class="pb"><div class="pbf" style="width:${pct}%"></div></div>`:`<span style="color:#ccc;font-size:10px">—</span>`}</td>
+      <td><span style="cursor:pointer;font-size:13px" onclick="event.stopPropagation();selP('${p.id}')">✏️</span></td>
+      <td><button class="del-btn" onclick="event.stopPropagation();askDelete('${p.id}')">🗑</button></td>
+    </tr>`;
+  }).join("");
+}
+// ── NAVIGATION ──
+function sw(v){
+  CV=v;
+  const tabs=["kader","training","spiele","hausaufgaben","weltmeister"];
+  const views=["vk","vt","vs","vhw","vwm"];
+  document.querySelectorAll(".mtabs .mt, #mobile-nav .mt").forEach((t,i)=>t.classList.toggle("on",tabs[i%5]===v));
+  views.forEach((id,i)=>document.getElementById(id).style.display=tabs[i]===v?"block":"none");
+  if(v==="training")rSL();
+  if(v==="spiele")renderSpiele();
+  if(v==="hausaufgaben")renderHW();
+  if(v==="weltmeister")renderWM();
+  window.scrollTo(0,0);
+}
+async function sK(id,v){if(!PS[id])PS[id]={};PS[id].k=v;await sp(id);rs();rt();}
+async function sPo(id,v){if(!PS[id])PS[id]={};PS[id].po=v;await sp(id);}
+function openM(id){document.getElementById(id).classList.add("open");}
+function closeM(id){document.getElementById(id).classList.remove("open");}
+async function saveNewPlayer(){
+  const f=document.getElementById("np-first").value.trim(),l=document.getElementById("np-last").value.trim()||"—";
+  if(!f){alert("Vorname eingeben!");return;}
+  const dRaw=document.getElementById("np-dob").value;
+  let dStr="—";if(dRaw){const[y,m,d]=dRaw.split("-");dStr=`${d}.${m}.${y}`;}
+  const reg=document.getElementById("np-reg").value;
+  // Neuen Spieler direkt in players_list schreiben → Firebase generiert die ID
+  await fbPush("players_list",{
+    f, l, d:dStr,
+    n:document.getElementById("np-nat").value||"D",
+    p:document.getElementById("np-pos").value,
+    r:reg==="true"?true:false
+  });
+  closeM("modal-player");
+  ["np-first","np-last","np-dob"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("np-nat").value="D";
+}
+function askDelete(id){DEL_ID=id;const p=PLAYERS.find(x=>x.id===id);document.getElementById("del-msg").textContent=`${p?.f||""} ${p?.l||""} wirklich löschen? Alle Daten gehen verloren.`;openM("modal-del");}
+async function confirmDelete(){
+  if(!DEL_ID) return;
+  // Aus players_list löschen (funktioniert für alle Spieler, egal ob alt oder neu)
+  await fbDel("players_list/"+DEL_ID);
+  // Profildaten (Notizen, Bewertungen etc.) ebenfalls löschen
+  await fbDel("players/"+DEL_ID);
+  delete PS[DEL_ID];
+  PLAYERS = PLAYERS.filter(p => p.id !== DEL_ID);
+  if(SEL===DEL_ID){SEL=null;document.getElementById("pnl").style.display="none";}
+  DEL_ID=null; closeM("modal-del"); rs(); rt();
+}
+function selP(id){if(SEL===id){SEL=null;document.getElementById("pnl").style.display="none";rt();return;}SEL=id;PT="profil";rt();rp(id);document.getElementById("pnl").style.display="block";setTimeout(()=>document.getElementById("pnl").scrollIntoView({behavior:"smooth",block:"nearest"}),50);}
+function rp(id){
+  const p=PLAYERS.find(x=>x.id===id);if(!p)return;
+  const ps=PS[id]||{},po=ps.po||p.p,k=ps.k||"";
+  const tabs=["profil","staerken","massnahmen","anwesenheit"],tln=["Profil","Stärken","Maßnahmen","Anwesenheit"];
+  document.getElementById("pnl").innerHTML=`
+    <div class="ph"><div class="pav ${po==="TW"?"o":"g"}">${ii(p.f,p.l)}</div>
+      <div><div class="pnm">${p.f} ${p.l!=="—"?p.l:""}</div><div class="pmt">${po==="TW"?"Torwart":"Feldspieler"} · ${KC[k].l}${p.d&&p.d!=="—"?" · "+p.d:""}</div></div>
+      <div class="pcl" onclick="selP('${id}')">×</div></div>
+    <div class="ptb">${tabs.map((t,i)=>`<div class="ptbi${PT===t?" on":""}" onclick="swPT('${id}','${t}')">${tln[i]}</div>`).join("")}</div>
+    <div class="pb2" id="pb2"></div>`;
+  rpT(id);
+}
+function swPT(id,t){PT=t;document.querySelectorAll(".ptbi").forEach((b,i)=>b.classList.toggle("on",["profil","staerken","massnahmen","anwesenheit"][i]===t));rpT(id);}
+async function rpT(id){
+  const body=document.getElementById("pb2"),p=PLAYERS.find(x=>x.id===id);if(!p)return;
+  const ps=PS[id]||{};
+  if(PT==="profil"){
+    STR=ps.rt||0;
+    body.innerHTML=`<div class="pr">
+      <div><div class="pl">Bewertung</div><div class="stl" id="pst">${[1,2,3,4,5].map(i=>`<span class="ss${i<=STR?" f":""}" onclick="setSt(${i},'${id}')" onmouseover="hvSt(${i})" onmouseout="hvSt(0)">★</span>`).join("")}</div></div>
+      <div><div class="pl">Kategorie</div><select class="ms" onchange="sK('${id}',this.value)"><option value="">– offen –</option><option value="stark"${ps.k==="stark"?" selected":""}>★ Stark</option><option value="mittel"${ps.k==="mittel"?" selected":""}>◆ Mittel</option><option value="schwach"${ps.k==="schwach"?" selected":""}>▽ Schwach</option><option value="inaktiv"${ps.k==="inaktiv"?" selected":""}>○ Inaktiv</option></select></div></div>
+    <div class="pl">Trainer-Notizen</div>
+    <textarea id="pnt" rows="4" placeholder="Beobachtungen, Stärken, Schwächen...">${ps.nt||""}</textarea>
+    <div class="sr"><span class="sv-ok" id="sv-ok">✓ Gespeichert</span><button class="bg" onclick="svProfil('${id}')">💾 Speichern</button></div>`;
+  } else if(PT==="staerken"){
+    const rt=ps.ratings||{};
+    const rated=RATING_CATS.filter(c=>rt[c.id]>0);
+    const avg=rated.length?rated.reduce((s,c)=>s+rt[c.id],0)/rated.length:0;
+    const autoK=autoKat(rt);
+    const autoLabel={stark:"★ Stark",mittel:"◆ Mittel",schwach:"▽ Schwach","":" (noch keine Wertung)"}[autoK];
+    const autoColor={stark:"#1a7a3c",mittel:"#1565c0",schwach:"#e65100","":" #aaa"}[autoK];
+    body.innerHTML=`
+    <div style="background:#f9f9f9;border-radius:10px;padding:10px 12px;border:1px solid #eee;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+      <div style="flex:1">
+        <div style="font-size:10px;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:2px">Auto-Einstufung</div>
+        <div style="font-size:15px;font-weight:700;color:${autoColor}">${autoLabel||"– noch keine Wertung"}</div>
+        ${avg>0?`<div style="font-size:11px;color:#888;margin-top:2px">Ø ${avg.toFixed(1)} von 5.0 · ${rated.length}/5 Kategorien bewertet</div>`:""}
+      </div>
+      <div>
+        <div style="font-size:10px;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:4px">Auch manuell</div>
+        <select class="ms" onchange="sK('${id}',this.value)" style="font-size:12px;padding:5px 8px">
+          <option value="">– offen –</option>
+          <option value="stark"${ps.k==="stark"?" selected":""}>★ Stark</option>
+          <option value="mittel"${ps.k==="mittel"?" selected":""}>◆ Mittel</option>
+          <option value="schwach"${ps.k==="schwach"?" selected":""}>▽ Schwach</option>
+          <option value="inaktiv"${ps.k==="inaktiv"?" selected":""}>○ Inaktiv</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      ${RATING_CATS.map(c=>{const v=rt[c.id]||0;return`
+      <div style="background:#f9f9f9;border-radius:10px;padding:12px;border:1px solid #eee" id="rc_${c.id}">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          <span style="font-size:18px">${c.icon}</span>
+          <div style="flex:1"><div style="font-size:13px;font-weight:700">${c.name}</div><div style="font-size:10px;color:#888">${c.desc}</div></div>
+          <div style="font-size:13px;font-weight:700;color:${v>=4?"#1a7a3c":v>=2.5?"#1565c0":v>0?"#e65100":"#ccc"}">${v>0?v+".0":"—"}</div>
+        </div>
+        <div style="display:flex;gap:5px;margin-bottom:5px">
+          ${[1,2,3,4,5].map(i=>`<button onclick="setRating('${id}','${c.id}',${i})" style="flex:1;padding:8px 0;border-radius:7px;border:2px solid ${v>=i?"#1a7a3c":"#e0e0e0"};background:${v>=i?"#e8f5e9":"#fff"};font-size:13px;cursor:pointer;font-weight:700;color:${v>=i?"#1a7a3c":"#aaa"}">${i}</button>`).join("")}
+        </div>
+        <div style="height:5px;background:#eee;border-radius:3px"><div style="width:${v*20}%;height:5px;background:${v>=4?"#1a7a3c":v>=2.5?"#1565c0":v>0?"#e65100":"#eee"};border-radius:3px;transition:width .2s" id="rb_${c.id}"></div></div>
+      </div>`;}).join("")}
+    </div>
+    <div class="sr" style="margin-top:12px"><span class="sv-ok" id="sv-ok2">✓ Gespeichert</span><button class="bg" onclick="svRatings('${id}')">💾 Bewertung speichern</button></div>`;
+  
+  } else if(PT==="massnahmen"){
+    const m=ps.mz||{};
+    body.innerHTML=`<div class="mg">
+      <div class="mi"><label>🎯 Trainingsschwerpunkt</label><textarea id="msw" rows="2">${m.sw||""}</textarea></div>
+      <div class="mi"><label>⚽ Konkrete Übungen</label><textarea id="mub" rows="3">${m.ub||""}</textarea></div>
+      <div class="mi"><label>📈 Kurzfristige Ziele</label><textarea id="mkf" rows="2">${m.kf||""}</textarea></div>
+      <div class="mi"><label>🚀 Entwicklungsziele</label><textarea id="mzl" rows="2">${m.zl||""}</textarea></div>
+    </div><div class="sr"><button class="bg" onclick="svMz('${id}')">💾 Speichern</button></div>`;
+  } else if(PT==="anwesenheit"){
+    const allA=[];for(const s of SS){const a=await gA(s.id);allA.push({s,v:a[id]||""});}
+    const an=allA.filter(x=>x.v==="an").length,et=allA.filter(x=>x.v==="et").length,ab=allA.filter(x=>x.v==="ab").length;
+    const pct=SS.length?Math.round(an/SS.length*100):null;
+    body.innerHTML=`${SS.length?`<div class="asm">📊 <b>${SS.length} Einheiten</b> · Anwesend: <b>${an}</b> · Entschuldigt: ${et} · Abwesend: ${ab}${pct!=null?" · <b>"+pct+"%</b>":""}</div>`:`<div class="es">Noch keine Einheiten.</div>`}
+    <div class="al">${[...allA].reverse().map(({s,v})=>`<div class="arw"><div><div class="ad">${s.date}</div><div class="ald">${s.label||""}</div></div>
+      <div class="as3"><div class="ab3 an${v==="an"?" on":""}" onclick="tgAP('${id}','${s.id}','an',this)">✓ An</div><div class="ab3 et${v==="et"?" on":""}" onclick="tgAP('${id}','${s.id}','et',this)">~ Ent</div><div class="ab3 ab${v==="ab"?" on":""}" onclick="tgAP('${id}','${s.id}','ab',this)">✗ Ab</div></div></div>`).join("")}</div>`;
+  }
+}
+function hvSt(n){document.querySelectorAll("#pst .ss").forEach((s,i)=>s.classList.toggle("f",n>0?i<n:i<STR));}
+function setSt(n,id){STR=n;document.querySelectorAll("#pst .ss").forEach((s,i)=>s.classList.toggle("f",i<n));}
+async function svProfil(id){PS[id].rt=STR;PS[id].nt=document.getElementById("pnt").value;await sp(id);const el=document.getElementById("sv-ok");if(el){el.style.opacity=1;setTimeout(()=>el.style.opacity=0,2000);}rt();}
+function setRating(id,cat,val){
+  if(!PS[id].ratings)PS[id].ratings={};
+  // Toggle off if same value clicked
+  PS[id].ratings[cat]=PS[id].ratings[cat]===val?0:val;
+  const v=PS[id].ratings[cat]||0;
+  // Update bar
+  const bar=document.getElementById("rb_"+cat);
+  if(bar){bar.style.width=(v*20)+"%";bar.style.background=v>=4?"#1a7a3c":v>=2.5?"#1565c0":v>0?"#e65100":"#eee";}
+  // Update buttons in this card
+  document.getElementById("rc_"+cat)?.querySelectorAll("button").forEach((b,i)=>{
+    const active=v>=(i+1);
+    b.style.borderColor=active?"#1a7a3c":"#e0e0e0";
+    b.style.background=active?"#e8f5e9":"#fff";
+    b.style.color=active?"#1a7a3c":"#aaa";
+  });
+  // Update score label
+  const scoreEl=document.querySelector(`#rc_${cat} div[style*="font-size:13px;font-weight:700"]`);
+  if(scoreEl)scoreEl.textContent=v>0?v+".0":"—";
+  // Recalculate auto-classification
+  const autoK=autoKat(PS[id].ratings);
+  const autoLabel={stark:"★ Stark",mittel:"◆ Mittel",schwach:"▽ Schwach","":" (noch keine Wertung)"}[autoK];
+  const autoColor={stark:"#1a7a3c",mittel:"#1565c0",schwach:"#e65100","":" #aaa"}[autoK];
+  const autoEl=document.querySelector(".pnl .pb2 [style*='font-size:15px']");
+  if(autoEl){autoEl.textContent=autoLabel||"– noch keine Wertung";autoEl.style.color=autoColor;}
+}
+async function svRatings(id){
+  if(!PS[id].ratings)PS[id].ratings={};
+  // Auto-set Kategorie based on ratings
+  const autoK=autoKat(PS[id].ratings);
+  if(autoK&&PS[id].k!=="inaktiv")PS[id].k=autoK;
+  await sp(id);
+  const el=document.getElementById("sv-ok2");if(el){el.style.opacity=1;setTimeout(()=>el.style.opacity=0,2000);}
+  rs();rt();
+}
+async function svAt(id){await sp(id);}// legacy compat
+async function svMz(id){PS[id].mz={sw:document.getElementById("msw").value,ub:document.getElementById("mub").value,kf:document.getElementById("mkf").value,zl:document.getElementById("mzl").value};await sp(id);}
+async function tgAP(pid,sid,val,btn){const att=await gA(sid);att[pid]=att[pid]===val?"":val;await sA(sid,att);btn.closest(".as3").querySelectorAll(".ab3").forEach(b=>b.classList.remove("on"));if(att[pid])btn.classList.add("on");calcPct();rt();}
+
+// ── NAVIGATION ──
+function sw(v){
+  CV=v;
+  document.querySelectorAll(".mt").forEach((t,i)=>t.classList.toggle("on",["kader","training","spiele","hausaufgaben","weltmeister"][i]===v));
+  ["vk","vt","vs","vhw","vwm"].forEach((id,i)=>document.getElementById(id).style.display=["kader","training","spiele","hausaufgaben","weltmeister"][i]===v?"block":"none");
+  if(v==="training")rSL();
+  if(v==="spiele")renderSpiele();
+  if(v==="hausaufgaben")renderHW();
+  if(v==="weltmeister")renderWM();
+}
+
+// ── TRAINING ──
+const fmtD=iso=>{if(!iso)return"—";const[y,m,d]=iso.split("-");return`${d}.${m}.${y}`;};
+function getSerienDates(from,to,dow){const dates=[],cur=new Date(from),end=new Date(to);while(cur.getDay()!==dow)cur.setDate(cur.getDate()+1);while(cur<=end){dates.push(`${String(cur.getDate()).padStart(2,"0")}.${String(cur.getMonth()+1).padStart(2,"0")}.${cur.getFullYear()}`);cur.setDate(cur.getDate()+7);}return dates;}
+document.addEventListener("change",e=>{if(["sr-from","sr-to","sr-day"].includes(e.target.id)){const from=document.getElementById("sr-from").value,to=document.getElementById("sr-to").value,dow=parseInt(document.getElementById("sr-day").value);if(from&&to)document.getElementById("sr-preview").textContent=`→ ${getSerienDates(from,to,dow).length} Termine`;}});
+function openModalT(id){openM(id);if(id==="modal-serie"){const now=new Date(),p=n=>String(n).padStart(2,"0"),f=d=>`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;document.getElementById("sr-from").value=f(now);const e=new Date(now);e.setDate(e.getDate()+56);document.getElementById("sr-to").value=f(e);}}
+async function addSingle(){const d=document.getElementById("s-date").value,l=document.getElementById("s-label").value.trim();if(!d){alert("Datum eingeben!");return;}const s={id:"s"+Date.now(),date:fmtD(d),label:l||"Training",cancelled:false};SS.push(s);SS.sort((a,b)=>a.date.split(".").reverse().join("").localeCompare(b.date.split(".").reverse().join("")));await svSS();closeM("modal-single");document.getElementById("s-date").value="";document.getElementById("s-label").value="";SSL=s.id;rSL();}
+async function addSerie(){const from=document.getElementById("sr-from").value,to=document.getElementById("sr-to").value,dow=parseInt(document.getElementById("sr-day").value),label=document.getElementById("sr-label").value.trim()||"Training",time=document.getElementById("sr-time").value;if(!from||!to){alert("Datum eingeben!");return;}const dates=getSerienDates(from,to,dow);if(!dates.length){alert("Keine Termine.");return;}const sid="serie_"+Date.now();const ns=dates.map((d,i)=>({id:"s"+(Date.now()+i),date:d,label:time?label+" · "+time:label,cancelled:false,serieId:sid}));SS=[...SS,...ns];SS.sort((a,b)=>a.date.split(".").reverse().join("").localeCompare(b.date.split(".").reverse().join("")));await svSS();closeM("modal-serie");document.getElementById("sr-label").value="";SSL=ns[0].id;rSL();}
+async function cancelSess(sid,e){e.stopPropagation();const s=SS.find(x=>x.id===sid);if(!s)return;s.cancelled=!s.cancelled;await svSS();rSL();if(SSL===sid)await rAG(sid);}
+async function delSess(sid,e){e.stopPropagation();if(!confirm("Einheit löschen?"))return;SS=SS.filter(s=>s.id!==sid);await svSS();await fbDel("att/"+sid);if(SSL===sid){SSL=null;document.getElementById("tr").innerHTML=`<div class="es">← Einheit auswählen</div>`;}calcPct();rSL();rt();}
+function rSL(){
+  const el=document.getElementById("sl");
+  if(!SS.length){el.innerHTML=`<div class="es">Keine Einheiten. Termin hinzufügen.</div>`;return;}
+  let html="",cur="";
+  const MONATE=["","Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+  [...SS].sort((a,b)=>b.date.split(".").reverse().join("").localeCompare(a.date.split(".").reverse().join(""))).forEach(s=>{
+    const parts=s.date.split(".");const mn=parts.length===3?MONATE[parseInt(parts[1])]+" "+parts[2]:"";
+    if(mn!==cur){cur=mn;html+=`<div style="font-size:10px;font-weight:700;color:#888;padding:5px 10px;background:#f0f0f0;text-transform:uppercase;letter-spacing:.5px">${mn}</div>`;}
+    html+=`<div class="trsi${SSL===s.id?" on":""}" onclick="selSess('${s.id}')" style="${s.cancelled?"opacity:.5;text-decoration:line-through":""}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px">
+        <div class="trsid">${s.date}</div>
+        <div style="display:flex;gap:3px">
+          <span style="cursor:pointer;font-size:11px;padding:1px 5px;border-radius:3px;border:1px solid #ddd;background:#fff;color:${s.cancelled?"#1a7a3c":"#e65100"}" onclick="cancelSess('${s.id}',event)">${s.cancelled?"↩":"✕"}</span>
+          <span class="ds" onclick="delSess('${s.id}',event)">🗑</span>
+        </div>
+      </div>
+      <div class="trsil">${s.label||"Training"}${s.cancelled?" · <b style='color:#c0392b'>ABGESAGT</b>":""}</div>
+    </div>`;
+  });
+  el.innerHTML=html;if(SSL)rAG(SSL);
+}
+async function selSess(sid){SSL=sid;rSL();await rAG(sid);}
+async function rAG(sid){
+  const s=SS.find(x=>x.id===sid);if(!s)return;
+  const att=ATT_CACHE[sid]||{};
+  const active=PLAYERS.filter(p=>!p.nx&&PS[p.id]?.k!=="inaktiv");
+  const an=Object.values(att).filter(v=>v==="an").length,et=Object.values(att).filter(v=>v==="et").length,ab=Object.values(att).filter(v=>v==="ab").length,of=active.length-an-et-ab;
+  document.getElementById("tr").innerHTML=`
+    ${s.cancelled?`<div style="background:#c0392b;color:#fff;padding:.5rem 1rem;font-size:13px;font-weight:700">⚠ Abgesagt <button onclick="cancelSess('${sid}',event)" style="margin-left:12px;padding:2px 8px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:5px;cursor:pointer;font-size:11px">Aufheben</button></div>`:""}
+    <div class="trrh"><div style="display:flex;align-items:center;justify-content:space-between">
+      <div><div class="trrht">${s.date} · ${s.label||"Training"}</div><div class="trrhs">${active.length} aktive Spieler</div></div>
+      ${!s.cancelled?`<button onclick="cancelSess('${sid}',event)" style="padding:4px 10px;background:#fff3e0;color:#e65100;border:1px solid #ffcc80;border-radius:6px;font-size:11px;cursor:pointer;font-weight:700">✕ Absagen</button>`:""}
+    </div></div>
+    <div class="trstats"><span class="tsc an">✓ An: ${an}</span><span class="tsc et">~ Ent: ${et}</span><span class="tsc ab">✗ Ab: ${ab}</span><span class="tsc of">? Offen: ${of}</span></div>
+    <div class="trag">${s.cancelled?`<div class="es">Abgesagt.</div>`:active.sort((a,b)=>(a.l+a.f).localeCompare(b.l+b.f,"de")).map(p=>{
+      const po=PS[p.id]?.po||p.p,k=PS[p.id]?.k||"",v=att[p.id]||"";
+      return`<div class="trar"><div class="trav ${po==="TW"?"o":"g"}">${ii(p.f,p.l)}</div>
+        <div class="tran">${p.l!=="—"?p.l+",":""} ${p.f}</div>
+        <div class="trak" style="color:${KC[k].c}">${KC[k].l}</div>
+        <div class="trab">
+          <div class="trbtn an${v==="an"?" on":""}" onclick="tgA('${sid}','${p.id}','an',this)">✓ An</div>
+          <div class="trbtn et${v==="et"?" on":""}" onclick="tgA('${sid}','${p.id}','et',this)">~ Ent</div>
+          <div class="trbtn ab${v==="ab"?" on":""}" onclick="tgA('${sid}','${p.id}','ab',this)">✗ Ab</div>
+        </div></div>`;}).join("")}</div>`;
+}
+async function tgA(sid,pid,val,btn){const s=SS.find(x=>x.id===sid);if(s?.cancelled)return;const att=await gA(sid);att[pid]=att[pid]===val?"":val;await sA(sid,att);btn.closest(".trab").querySelectorAll(".trbtn").forEach(b=>b.classList.remove("on"));if(att[pid])btn.classList.add("on");calcPct();rt();const active=PLAYERS.filter(p=>!p.nx&&PS[p.id]?.k!=="inaktiv");const a2=ATT_CACHE[sid]||{};const an=Object.values(a2).filter(v=>v==="an").length,et=Object.values(a2).filter(v=>v==="et").length,ab=Object.values(a2).filter(v=>v==="ab").length,of=active.length-an-et-ab;const st=document.querySelector(".trstats");if(st)st.innerHTML=`<span class="tsc an">✓ An: ${an}</span><span class="tsc et">~ Ent: ${et}</span><span class="tsc ab">✗ Ab: ${ab}</span><span class="tsc of">? Offen: ${of}</span>`;}
+
+// ── SPIELE ──
+function renderSpiele(){
+  const entries=Object.entries(SPIELE).sort((a,b)=>{
+    const da=a[1].dateISO||a[0],db=b[1].dateISO||b[0];
+    return db.localeCompare(da);
+  });
+  const list=document.getElementById("spiele-list");
+  list.innerHTML=entries.length?entries.map(([k,g])=>{
+    const nominated=Object.keys(g.squad1||{}).length>0||Object.keys(g.squad2||{}).length>0;
+    return`<div class="spiel-item${SEL_SPIEL===k?" on":""}" onclick="selSpiel('${k}')">
+      <div class="spiel-item-title">${g.gastgeber||"Spieltag"}</div>
+      <div class="spiel-item-sub">${g.date||""} ${g.ort?"&middot; "+g.ort:""}</div>
+      <span class="spiel-result-badge" style="background:${nominated?"#e8f5e9":"#fff8e1"};color:${nominated?"#1a7a3c":"#e65100"}">
+        ${nominated?"Kader nominiert":"Kader offen"}
+      </span>
+    </div>`;
+  }).join(""):`<div class="es">Noch keine Spieltage.<br>Klick auf &quot;+ Neu&quot;.</div>`;
+  if(SEL_SPIEL&&SPIELE[SEL_SPIEL])renderSD(SEL_SPIEL);
+}
+function selSpiel(k){SEL_SPIEL=k;renderSpiele();}
+let SD_ACTIVE_TEAM=1;
+
+function renderSD(k){
+  const g=SPIELE[k];if(!g)return;
+  const sq1=Object.keys(g.squad1||{}).length;
+  const sq2=Object.keys(g.squad2||{}).length;
+  const sq3=Object.keys(g.squad3||{}).length;
+  document.getElementById("spiele-detail").innerHTML=`
+    <div class="sd-hdr">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:15px;font-weight:700">${g.gastgeber||"Spieltag"}</div>
+          <div style="font-size:12px;opacity:.8;margin-top:2px">${g.date||""}${g.ort?" &middot; "+g.ort:""}</div>
+        </div>
+        <button onclick="delSpiel('${k}')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px">Loeschen</button>
+      </div>
+      ${g.strasse?`<div style="font-size:11px;opacity:.75;margin-top:5px">${g.strasse}, ${g.plz||""} ${g.ort||""}</div>`:""}
+      ${g.format?`<div style="font-size:11px;opacity:.75;margin-top:2px">${g.format}</div>`:""}
+      ${g.hinweis?`<div style="margin-top:6px;font-size:12px;background:rgba(255,255,255,.15);border-radius:6px;padding:5px 10px">${g.hinweis}</div>`:""}
+    </div>
+    <div style="display:flex;border-bottom:2px solid #eee;background:#fff;overflow-x:auto">
+      <div id="sd-t1-tab" onclick="showSquadTab('${k}',1)" style="flex:1;min-width:80px;padding:12px 8px;text-align:center;font-size:13px;font-weight:700;cursor:pointer;border-bottom:3px solid #1a7a3c;color:#1a7a3c;white-space:nowrap">
+        Team 1 (${sq1})
+      </div>
+      <div id="sd-t2-tab" onclick="showSquadTab('${k}',2)" style="flex:1;min-width:80px;padding:12px 8px;text-align:center;font-size:13px;font-weight:400;cursor:pointer;border-bottom:3px solid transparent;color:#888;white-space:nowrap">
+        Team 2 (${sq2})
+      </div>
+      <div id="sd-t3-tab" onclick="showSquadTab('${k}',3)" style="flex:1;min-width:80px;padding:12px 8px;text-align:center;font-size:13px;font-weight:400;cursor:pointer;border-bottom:3px solid transparent;color:#888;white-space:nowrap">
+        Team 3 (${sq3})
+      </div>
+    </div>
+    <div id="sd-squad-body"></div>
+    <div style="padding:.875rem 1rem;border-top:1px solid #eee">
+      <button onclick="sendSpielWA('${k}')" style="width:100%;padding:13px;background:#25D366;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer">WhatsApp Nachricht senden</button>
+    </div>`;
+  showSquadTab(k,1);
+}
+
+function showSquadTab(k,num){
+  SD_ACTIVE_TEAM=num;
+  const g=SPIELE[k];if(!g)return;
+  [1,2,3].forEach(n=>{
+    const t=document.getElementById("sd-t"+n+"-tab");if(!t)return;
+    const on=n===num;
+    t.style.borderBottom=on?"3px solid #1a7a3c":"3px solid transparent";
+    t.style.color=on?"#1a7a3c":"#888";t.style.fontWeight=on?"700":"400";
+  });
+  const squad=g["squad"+num]||{};
+  const treff=num===1?g.time1:num===2?g.time2:g.time3;
+  // Players already in other teams
+  const others=[1,2,3].filter(n=>n!==num).reduce((acc,n)=>{Object.keys(g["squad"+n]||{}).forEach(p=>acc[p]=n);return acc;},{});
+  const body=document.getElementById("sd-squad-body");if(!body)return;
+  const nominated=Object.keys(squad);
+  body.innerHTML=`
+    <div style="padding:.75rem 1rem;background:#f8f8f8;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px">
+      <span style="font-size:12px;color:#555;font-weight:600;flex-shrink:0">Treffpunkt:</span>
+      <input value="${treff||""}" placeholder="z.B. 08:45 Uhr vor dem Platz"
+        style="flex:1;border:1px solid #ddd;border-radius:8px;padding:8px 10px;font-size:14px;outline:none;background:#fff"
+        onchange="saveSpielField('${k}','time${num}',this.value)"/>
+    </div>
+    <div style="padding:.625rem .875rem;background:#f0fdf4;border-bottom:1px solid #e0f2e9;display:flex;flex-wrap:wrap;gap:4px;min-height:36px;align-items:center">
+      ${nominated.map(pid=>{const p=PLAYERS.find(x=>x.id===pid);return p?`<span style="background:#1a7a3c;color:#fff;font-size:12px;padding:3px 10px;border-radius:12px;font-weight:600">${p.f}</span>`:""}).join("")||'<span style="font-size:12px;color:#aaa">Noch niemand nominiert</span>'}
+    </div>
+    <div style="max-height:360px;overflow-y:auto">
+      ${PLAYERS.filter(p=>p.r).sort((a,b)=>(a.l+a.f).localeCompare(b.l+b.f,"de")).map(p=>{
+        const inSq=!!squad[p.id];const po=PS[p.id]?.po||p.p;const inOtherTeam=others[p.id];
+        return`<label style="display:flex;align-items:center;gap:10px;padding:10px 1rem;border-bottom:1px solid #f0f0f0;cursor:pointer;min-height:50px;background:${inSq?"#f0fdf4":inOtherTeam?"#fffbf0":"#fff"}">
+          <input type="checkbox" ${inSq?"checked":""} onchange="toggleSquad('${k}',${num},'${p.id}',this.checked)" style="width:22px;height:22px;cursor:pointer;accent-color:#1a7a3c;flex-shrink:0"/>
+          <div style="width:32px;height:32px;border-radius:50%;background:${po==="TW"?"#fff3e0":"#e8f5e9"};color:${po==="TW"?"#e65100":"#1a7a3c"};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${ii(p.f,p.l)}</div>
+          <span style="flex:1;font-size:14px;font-weight:${inSq?"700":"500"}">${p.l!=="&mdash;"?p.l+",":""} ${p.f}</span>
+          ${po==="TW"?`<span style="font-size:10px;background:#fff3e0;color:#e65100;padding:2px 7px;border-radius:6px;font-weight:700">TW</span>`:""}
+          ${inOtherTeam?`<span style="font-size:10px;color:#e65100;font-weight:600">Team ${inOtherTeam}</span>`:""}
+        </label>`;
+      }).join("")}
+    </div>`;
+}
+
+async function toggleSquad(k,num,pid,checked){
+  if(!SPIELE[k])return;
+  if(!SPIELE[k]["squad"+num])SPIELE[k]["squad"+num]={};
+  if(checked)SPIELE[k]["squad"+num][pid]=true;
+  else delete SPIELE[k]["squad"+num][pid];
+  const path="spiele/"+k+"/squad"+num+"/"+pid;
+  if(checked)await fbSet(path,true);else await fbDel(path);
+  const sq=Object.keys(SPIELE[k]["squad"+num]).length;
+  const tab=document.getElementById("sd-t"+num+"-tab");
+  if(tab)tab.textContent="Team "+num+" ("+sq+")";
+  // Update chip row
+  const chips=document.querySelector("#sd-squad-body [style*='f0fdf4']");
+  if(chips){
+    const names=Object.keys(SPIELE[k]["squad"+num]).map(pid=>{const pl=PLAYERS.find(x=>x.id===pid);return pl?`<span style="background:#1a7a3c;color:#fff;font-size:12px;padding:3px 10px;border-radius:12px;font-weight:600">${pl.f}</span>`:""}).join("");
+    chips.innerHTML=names||'<span style="font-size:12px;color:#aaa">Noch niemand nominiert</span>';
+  }
+}
+
+async function saveSpielField(k,field,val){
+  if(!SPIELE[k])return;SPIELE[k][field]=val;await fbSet("spiele/"+k+"/"+field,val);
+}
+
+function sendSpielWA(k){
+  const g=SPIELE[k];if(!g)return;
+  const getName=pid=>{const p=PLAYERS.find(x=>x.id===pid);return p?p.f:null;};
+  const n1=Object.keys(g.squad1||{}).map(getName).filter(Boolean).map(n=>"- "+n).join("\n");
+  const n2=Object.keys(g.squad2||{}).map(getName).filter(Boolean).map(n=>"- "+n).join("\n");
+  const n3=Object.keys(g.squad3||{}).map(getName).filter(Boolean).map(n=>"- "+n).join("\n");
+  const addrLine=[g.strasse,g.plz&&g.ort?g.plz+" "+g.ort:""].filter(Boolean).join(", ");
+
+  let msg="Spieltag bei *"+(g.gastgeber||"VfB Leimen")+"*\n\n";
+  msg+="Liebe Eltern,\n";
+  msg+="anbei der Kader fuer unseren";
+  if(g.format) msg+=" "+g.format;
+  msg+=" Spieltag";
+  if(addrLine) msg+=" ("+addrLine+")";
+  msg+=".\n\n";
+  if(n1){msg+="Team 1";if(g.time1)msg+=" (Treffpunkt "+g.time1+")";msg+="\n"+n1+"\n\n";}
+  if(n2){msg+="Team 2";if(g.time2)msg+=" (Treffpunkt "+g.time2+")";msg+="\n"+n2+"\n\n";}
+  if(n3){msg+="Team 3";if(g.time3)msg+=" (Treffpunkt "+g.time3+")";msg+="\n"+n3+"\n\n";}
+  if(g.hinweis) msg+=g.hinweis+"\n\n";
+  msg+="Viele Gruesse\nEuer Trainerteam - VfB Leimen";
+  window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank");
+}
+
+function onNewSpielVenue(){
+  const sel=document.getElementById("ns-venue-sel");if(!sel||!sel.value||sel.value==="_new")return;
+  const v=VENUES[sel.value];if(!v)return;
+  const set=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val||"";};
+  set("ns-gastgeber",v.name);set("ns-strasse",v.address);
+  const po=(v.plzort||"").split(" ");if(po.length>=2){set("ns-plz",po[0]);set("ns-ort",po.slice(1).join(" "));}
+  set("ns-time1",v.time1);set("ns-time2",v.time2);
+}
+
+function openNewSpielModal(){
+  const sel=document.getElementById("ns-venue-sel");
+  if(sel){sel.innerHTML=`<option value="">-- Gastgeber waehlen oder neu eingeben --</option>`+
+    Object.entries(VENUES).map(([id,v])=>`<option value="${id}">${v.name}</option>`).join("")+
+    `<option value="_new">+ Neuer Eintrag</option>`;}
+  openM("modal-spiel");
+}
+
+async function saveNewSpiel(){
+  const dRaw=document.getElementById("ns-date").value;if(!dRaw){alert("Datum eingeben!");return;}
+  const [y,m,d]=dRaw.split("-");const dateStr=d+"."+m+"."+y;
+  const g=id=>document.getElementById(id)?.value.trim()||"";
+  if(document.getElementById("ns-save-venue")?.checked&&g("ns-gastgeber")){
+    const vd={name:g("ns-gastgeber"),address:g("ns-strasse"),plzort:[g("ns-plz"),g("ns-ort")].filter(Boolean).join(" "),time1:g("ns-time1"),time2:g("ns-time2")};
+    const vr=await fbPush("venues",vd);VENUES[vr.name]=vd;
+  }
+  await fbPush("spiele",{date:dateStr,dateISO:dRaw,gastgeber:g("ns-gastgeber"),strasse:g("ns-strasse"),plz:g("ns-plz"),ort:g("ns-ort"),time1:g("ns-time1"),time2:g("ns-time2"),time3:g("ns-time3"),hinweis:g("ns-hinweis"),format:g("ns-format"),squad1:{},squad2:{},squad3:{}});
+  closeM("modal-spiel");
+  ["ns-gastgeber","ns-strasse","ns-plz","ns-ort","ns-time1","ns-time2","ns-time3","ns-hinweis","ns-format","ns-date"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
+}
+
+async function delSpiel(k){
+  if(!confirm("Spieltag loeschen?"))return;
+  await fbDel("spiele/"+k);SEL_SPIEL=null;
+  document.getElementById("spiele-detail").innerHTML=`<div class="es">Spieltag auswaehlen</div>`;
+}
+
+let VENUE_FOR_SPIEL=null;
+async function saveVenue(){
+  const name=document.getElementById("venue-name").value.trim();if(!name){alert("Name eingeben!");return;}
+  const v={name,address:document.getElementById("venue-addr").value.trim(),plzort:document.getElementById("venue-plzort").value.trim(),meeting:document.getElementById("venue-meet").value.trim()};
+  const ref=await fbPush("venues",v);VENUES[ref.name]=v;closeM("modal-venue");VENUE_FOR_SPIEL=null;
+}
+
+
+// ── HAUSAUFGABEN ──
+function hwFilter(f){HW_FILTER=f;["alle","offen","erledigt"].forEach(x=>{const b=document.getElementById("hwf-"+x);if(b)b.className="fb"+(x===f?" on-g":"");});renderHW();}
+
+function openNewHW(){
+  const sel=document.getElementById("hw-player");
+  sel.innerHTML=PLAYERS.filter(p=>p.r&&PS[p.id]?.k!=="inaktiv").sort((a,b)=>(a.l+a.f).localeCompare(b.l+b.f,"de")).map(p=>`<option value="${p.id}">${p.l!=="—"?p.l+", ":""}${p.f}</option>`).join("");
+  openM("modal-hw");
+}
+
+function applyHWT(){const t=document.getElementById("hw-template").value;if(t)document.getElementById("hw-desc").value=t;}
+
+async function saveHW(){
+  const pid=document.getElementById("hw-player").value;
+  const desc=document.getElementById("hw-desc").value.trim();
+  if(!desc){alert("Aufgabe eingeben!");return;}
+  const dR=document.getElementById("hw-due").value;
+  let due="";if(dR){const[y,m,d]=dR.split("-");due=d+"."+m+"."+y;}
+  await fbPush("hausaufgaben",{pid,desc,due,freq:document.getElementById("hw-freq").value,done:false,created:new Date().toLocaleDateString("de-DE")});
+  closeM("modal-hw");
+  document.getElementById("hw-desc").value="";
+  document.getElementById("hw-template").value="";
+}
+
+async function toggleHWDone(k,val){if(!HW[k])return;HW[k].done=val;await fbSet("hausaufgaben/"+k+"/done",val);renderHW();}
+async function deleteHW(k){if(!confirm("Hausaufgabe loeschen?"))return;delete HW[k];await fbDel("hausaufgaben/"+k);renderHW();}
+
+function buildHWMessage(p,h){
+  const name=p?p.f:"";
+  const due=h.due?" - bis "+h.due:"";
+  const freq=h.freq||"taeglich";
+  return "Hallo!\n"
+    +"Sport-Hausaufgabe fuer *"+name+"*"+due+":\n\n"
+    +h.desc+"\n\n"
+    +"Haeufigkeit: "+freq+"\n\n"
+    +"Regelmaessig ueben hilft sehr!\n"
+    +"Deine Trainer - VfB Leimen";
+}
+
+function renderHW(){
+  const q=(document.getElementById("hw-search")?.value||"").toLowerCase();
+  const filtered=Object.entries(HW).sort((a,b)=>b[0].localeCompare(a[0])).filter(([k,h])=>{
+    const p=PLAYERS.find(x=>x.id===h.pid);
+    if(q&&!(p?(p.f+" "+p.l).toLowerCase():"").includes(q))return false;
+    if(HW_FILTER==="offen"&&h.done)return false;
+    if(HW_FILTER==="erledigt"&&!h.done)return false;
+    return true;
+  });
+  const list=document.getElementById("hw-list");
+  if(!filtered.length){list.innerHTML=`<div style="text-align:center;padding:2rem;color:#999;font-size:13px">Keine Hausaufgaben. Klick auf &quot;+ Neue Aufgabe&quot;.</div>`;return;}
+  list.innerHTML=filtered.map(([k,h])=>{
+    const p=PLAYERS.find(x=>x.id===h.pid),po=PS[h.pid]?.po||"FP";
+    const pname=p?(p.l!=="—"?p.l+", ":"")+p.f:"Unbekannt";
+    const waUrl="https://wa.me/?text="+encodeURIComponent(buildHWMessage(p,h));
+    const statusBg=h.done?"#e8f5e9":"#fff8e1";
+    const statusC=h.done?"#1a7a3c":"#e65100";
+    const statusBd=h.done?"#a5d6a7":"#ffe082";
+    return`<div style="background:#fff;border:1px solid ${h.done?"#a5d6a7":"#eee"};border-radius:12px;padding:.875rem 1rem;display:flex;align-items:flex-start;gap:12px">
+      <div style="width:38px;height:38px;border-radius:50%;background:${po==="TW"?"#fff3e0":"#e8f5e9"};color:${po==="TW"?"#e65100":"#1a7a3c"};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${p?ii(p.f,p.l):"?"}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+          <span style="font-size:13px;font-weight:700">${pname}</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${statusBg};color:${statusC};border:1px solid ${statusBd};font-weight:600">${h.done?"Erledigt":"Offen"}</span>
+          ${h.freq?`<span style="font-size:10px;color:#888">${h.freq}</span>`:""}
+        </div>
+        <div style="font-size:13px;color:#333;line-height:1.5;margin-bottom:5px">${h.desc}</div>
+        <div style="font-size:11px;color:#aaa">${h.due?"Bis: "+h.due+"  ":""}Vergeben: ${h.created||""}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+        <a href="${waUrl}" target="_blank" style="padding:8px 12px;background:#25D366;color:#fff;border-radius:9px;font-size:12px;font-weight:700;text-decoration:none;text-align:center;display:block">WA</a>
+        <button onclick="toggleHWDone('${k}',${!h.done})" style="padding:8px 12px;background:${h.done?"#f5f5f5":"#e8f5e9"};color:${h.done?"#888":"#1a7a3c"};border:1px solid ${h.done?"#ddd":"#a5d6a7"};border-radius:9px;font-size:12px;cursor:pointer;font-weight:600">${h.done?"Oeffnen":"Erledigt"}</button>
+        <button onclick="deleteHW('${k}')" style="padding:8px 12px;background:#fff;color:#ccc;border:1px solid #eee;border-radius:9px;font-size:12px;cursor:pointer">Loeschen</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// ── WELTMEISTER ──
+function renderWM(){
+  const f=document.getElementById("wm-filter")?.value||"all",kf=document.getElementById("wm-kat")?.value||"all";
+  let sess=[...SS].filter(s=>!s.cancelled);
+  if(f==="last10")sess=sess.slice(-10);else if(f==="last5")sess=sess.slice(-5);
+  const active=PLAYERS.filter(p=>{if(p.nx)return false;const k=PS[p.id]?.k||"";if(kf!=="all"&&k!==kf)return false;return k!=="inaktiv";});
+  const scores=active.map(p=>{let an=0,et=0,ab=0;sess.forEach(s=>{const v=ATT_CACHE[s.id]?.[p.id]||"";if(v==="an")an++;else if(v==="et")et++;else if(v==="ab")ab++;});const pct=sess.length?Math.round(an/sess.length*100):0;return{p,an,et,ab,pct,tot:sess.length};}).sort((a,b)=>b.pct-a.pct||b.an-a.an);
+  const top3=scores.slice(0,3),bg=["#FFD700","#C0C0C0","#CD7F32"],h=["100px","80px","60px"],ord=[1,0,2];
+  document.getElementById("wm-podium").innerHTML=top3.length?`<div style="display:flex;align-items:flex-end;justify-content:center;gap:12px;margin-bottom:1rem">
+    ${ord.filter(i=>i<top3.length).map(i=>{const s=top3[i],po=PS[s.p.id]?.po||s.p.p;return`<div style="display:flex;flex-direction:column;align-items:center;gap:5px">
+      <div style="font-size:22px">${MEDALS[i]}</div>
+      <div style="width:44px;height:44px;border-radius:50%;background:${po==="TW"?"#fff3e0":"#e8f5e9"};color:${po==="TW"?"#e65100":"#1a7a3c"};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;border:2px solid ${bg[i]}">${ii(s.p.f,s.p.l)}</div>
+      <div style="font-size:11px;font-weight:700;text-align:center;max-width:70px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.p.f}</div>
+      <div style="font-size:14px;font-weight:700;color:#1a7a3c">${s.pct}%</div>
+      <div style="width:${i===0?"80px":"65px"};height:${h[i]};background:${bg[i]};border-radius:6px 6px 0 0;display:flex;align-items:flex-start;justify-content:center;padding-top:6px;font-size:12px;font-weight:700;color:#fff">${i+1}.</div>
+    </div>`;}).join("")}
+  </div><div style="text-align:center;font-size:12px;color:#888">${sess.length} Einheiten ausgewertet</div>`:`<div style="text-align:center;color:#aaa;font-size:13px;padding:1rem">Noch keine Daten.</div>`;
+  document.getElementById("wm-list").innerHTML=scores.map((s,i)=>{const po=PS[s.p.id]?.po||s.p.p,k=PS[s.p.id]?.k||"",kc=KC[k],bc=s.pct>=75?"#1a7a3c":s.pct>=50?"#f59e0b":"#e65100";
+    return`<div style="display:flex;align-items:center;gap:10px;padding:8px 1rem;border-bottom:1px solid #f0f0f0">
+      <div style="width:24px;text-align:center;font-size:13px;font-weight:700;color:#888;flex-shrink:0">${i<3?MEDALS[i]:i+1+"."}</div>
+      <div style="width:28px;height:28px;border-radius:50%;background:${po==="TW"?"#fff3e0":"#e8f5e9"};color:${po==="TW"?"#e65100":"#1a7a3c"};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0">${ii(s.p.f,s.p.l)}</div>
+      <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.p.l!=="—"?s.p.l+", ":""}${s.p.f}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:3px"><div style="flex:1;height:5px;background:#eee;border-radius:3px;overflow:hidden"><div style="width:${s.pct}%;height:5px;background:${bc};border-radius:3px"></div></div>
+        <span style="font-size:11px;font-weight:700;color:${bc};min-width:35px;text-align:right">${s.pct}%</span></div></div>
+      <div style="text-align:right;flex-shrink:0"><div style="font-size:11px;color:#1a7a3c;font-weight:700">${s.an}✓</div><div style="font-size:10px;color:#888">${s.et}~ ${s.ab}✗</div></div>
+      <div style="font-size:10px;padding:2px 6px;border-radius:4px;background:#f0f0f0;color:${kc.c};font-weight:700;flex-shrink:0">${kc.l.replace(/[★◆▽○] /,"")}</div>
+    </div>`;}).join("");
+}
+
+// ── START ──
+window.addEventListener("DOMContentLoaded", ()=>{
+  ATT_CACHE={};
+  // PS wird in init() aus Firebase befüllt, nicht mehr aus STATIC_PLAYERS
+  init().catch(e=>document.getElementById("load-status").textContent="Fehler: "+e.message);
+});
+</script>
+</body>
+</html>
